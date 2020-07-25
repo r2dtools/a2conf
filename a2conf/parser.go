@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/r2dtools/apache2-config/utils"
+	"github.com/r2dtools/a2conf/a2conf/utils"
 	"honnef.co/go/augeas"
 )
 
