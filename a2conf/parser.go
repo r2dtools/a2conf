@@ -14,57 +14,60 @@ import (
 // Parser ia a wrapper under the augeas to work with httpd config
 type Parser struct {
 	Augeas          augeas.Augeas
-	Root            string
+	ServerRoot      string
+	VHostRoot       string
 	configRoot      string
 	beforeDomReload func(unsavedFiles []string)
-	paths           map[string][]string
+	Paths           map[string][]string
 	existingPaths   map[string][]string
 }
 
-var parser *Parser
-
 // GetParser creates parser instance
-func GetParser(root string) (*Parser, error) {
-	if parser == nil {
-		root, err := filepath.Abs(root)
+func GetParser(serverRoot, vhostRoot string) (*Parser, error) {
+	serverRoot, err := filepath.Abs(serverRoot)
 
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
+	}
 
-		aug, err := augeas.New("/", "", augeas.None)
+	vhostRoot, err = filepath.Abs(vhostRoot)
 
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
+	}
 
-		parser = &Parser{
-			Augeas: aug,
-			Root:   root,
-		}
-		configRoot, err := parser.getConfigRoot()
+	aug, err := augeas.New("/", "", augeas.None)
 
-		if err != nil {
-			Close()
+	if err != nil {
+		return nil, err
+	}
 
-			return nil, err
-		}
+	parser := &Parser{
+		Augeas:     aug,
+		ServerRoot: serverRoot,
+		VHostRoot:  vhostRoot,
+	}
+	configRoot, err := parser.getConfigRoot()
 
-		if err = parser.ParseFile(configRoot); err != nil {
-			Close()
+	if err != nil {
+		parser.Close()
 
-			return nil, fmt.Errorf("could not parse apache config: %v", err)
-		}
+		return nil, err
+	}
+
+	if err = parser.ParseFile(configRoot); err != nil {
+		parser.Close()
+
+		return nil, fmt.Errorf("could not parse apache config: %v", err)
 	}
 
 	return parser, nil
 }
 
 // Close closes the Parser instance and frees any storage associated with it.
-func Close() {
-	if parser != nil {
-		parser.Augeas.Close()
-		parser = nil
+func (p *Parser) Close() {
+	if p != nil {
+		p.Augeas.Close()
 	}
 }
 
@@ -77,18 +80,24 @@ func (p *Parser) SetBeforeDomReloadCallback(callback func(unsavedFiles []string)
 }
 
 func (p *Parser) getConfigRoot() (string, error) {
+	if p.configRoot != "" {
+		return p.configRoot, nil
+	}
+
 	configs := []string{"apache2.conf", "httpd.conf", "conf/httpd.conf"}
 
 	for _, config := range configs {
-		configPath := path.Join(p.Root, config)
-		_, err := os.Stat(configPath)
+		configRootPath := path.Join(p.configRoot, config)
+		_, err := os.Stat(configRootPath)
 
 		if err == nil {
-			return configPath, nil
+			p.configRoot = configRootPath
+
+			return p.configRoot, nil
 		}
 	}
 
-	return "", fmt.Errorf("could not find any apache config file \"%s\" in the root directory \"%s\"", strings.Join(configs, ", "), p.Root)
+	return "", fmt.Errorf("could not find any apache config file \"%s\" in the root directory \"%s\"", strings.Join(configs, ", "), p.configRoot)
 }
 
 // ParseFile parses file with Auegause
@@ -183,12 +192,12 @@ func (p *Parser) Save() error {
 
 // Checks if fPath exists in augeas paths
 // We should try to append the new fPath to augeas
-// parser paths, and / or remove the old one with more
+// parser paths, and/or remove the old one with more
 // narrow matching.
 func (p *Parser) checkPath(fPath string) (useNew, removeOld bool) {
 	filename := filepath.Base(fPath)
 	dirname := filepath.Dir(fPath)
-	exisingMatches, ok := p.paths[dirname]
+	exisingMatches, ok := p.Paths[dirname]
 
 	if !ok {
 		return true, false
@@ -208,7 +217,7 @@ func (p *Parser) checkPath(fPath string) (useNew, removeOld bool) {
 // Remove a transform from Augeas
 func (p *Parser) removeTransform(fPath string) {
 	dirnameToRemove := filepath.Dir(fPath)
-	existedFilenames := p.paths[dirnameToRemove]
+	existedFilenames := p.Paths[dirnameToRemove]
 
 	for _, filename := range existedFilenames {
 		pathToRemove := filepath.Join(dirnameToRemove, filename)
@@ -219,7 +228,7 @@ func (p *Parser) removeTransform(fPath string) {
 		}
 	}
 
-	delete(p.paths, dirnameToRemove)
+	delete(p.Paths, dirnameToRemove)
 }
 
 // Add a transform to Augeas
@@ -240,8 +249,8 @@ func (p *Parser) addTransform(fPath string) error {
 		p.Augeas.Set("/augeas/load/Httpd/incl", fPath)
 	}
 
-	paths := append(p.paths[dirnameToAdd], fileNameToAdd)
-	p.paths[dirnameToAdd] = paths
+	paths := append(p.Paths[dirnameToAdd], fileNameToAdd)
+	p.Paths[dirnameToAdd] = paths
 
 	return nil
 }
@@ -281,4 +290,48 @@ func (p *Parser) getUnsavedFiles() ([]string, error) {
 	}
 
 	return paths, nil
+}
+
+// IsFilenameExistInCurrentPaths checks if the file path is parsed by current Augeas parser config
+func (p *Parser) IsFilenameExistInCurrentPaths(filename string) bool {
+	return p.isFilenameExistInPaths(filename, p.Paths)
+}
+
+// IsFilenameExistInOriginalPaths checks if the file path is parsed by existing Apache config
+func (p *Parser) IsFilenameExistInOriginalPaths(filename string) bool {
+	return p.isFilenameExistInPaths(filename, p.existingPaths)
+}
+
+func (p *Parser) isFilenameExistInPaths(filename string, paths map[string][]string) bool {
+	for dir, fNames := range paths {
+		for _, fName := range fNames {
+			isMatch, err := path.Match(path.Join(dir, fName), filename)
+
+			if err != nil {
+				continue
+			}
+
+			if isMatch {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// GetRootAugPath returns Augeas path of the root configuration
+func (p *Parser) GetRootAugPath() (string, error) {
+	configRoot, err := p.getConfigRoot()
+
+	if err != nil {
+		return "", err
+	}
+
+	return GetAugPath(configRoot), nil
+}
+
+// GetAugPath returns Augeas path for the file full path
+func GetAugPath(fullPath string) string {
+	return fmt.Sprintf("/files/%s", fullPath)
 }

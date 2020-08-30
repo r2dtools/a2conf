@@ -17,4 +17,19 @@ func main() {
 	}
 
 	fmt.Printf("output: %v", output)
+
+	options := make(map[string]string)
+	configurator, err := a2conf.GetApacheConfigurator(options)
+
+	if err != nil {
+		panic(fmt.Sprintf("could not create apache configurator: %v", err))
+	}
+
+	vhosts, err := configurator.GetVhosts()
+
+	if err != nil {
+		panic(fmt.Sprintf("could not get virtual hosts: %v", err))
+	}
+
+	fmt.Printf("vhsosts: %v", vhosts)
 }
