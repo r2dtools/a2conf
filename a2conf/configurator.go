@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-)
 
-const (
-	APACHE_MIN_VERSION = "2.4"
+	"github.com/r2dtools/a2conf/a2conf/entity"
+	"github.com/r2dtools/a2conf/a2conf/utils"
 )
 
 // ApacheConfigurator manipulates with apache configs
@@ -15,17 +14,22 @@ type ApacheConfigurator struct {
 	Parser  *Parser
 	ctl     *ApacheCtl
 	version string
-	vhosts  []string
+	vhosts  []*entity.VirtualHost
 	options map[string]string
 }
 
+type vhsotNames struct {
+	ServerName    string
+	ServerAliases []string
+}
+
 // GetVhosts returns configured Apache vhosts
-func (ac *ApacheConfigurator) GetVhosts() ([]string, error) {
+func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 	if ac.vhosts != nil {
 		return ac.vhosts, nil
 	}
 
-	ac.vhosts = make([]string, 0)
+	ac.vhosts = make([]*entity.VirtualHost, 0)
 
 	for vhostPath := range ac.Parser.Paths {
 		paths, err := ac.Parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", vhostPath))
@@ -35,21 +39,149 @@ func (ac *ApacheConfigurator) GetVhosts() ([]string, error) {
 		}
 
 		for _, path := range paths {
-			if strings.Contains(strings.ToLower(path), "virtualhost") {
+			if !strings.Contains(strings.ToLower(path), "virtualhost") {
 				continue
 			}
 
-			ac.vhosts = append(ac.vhosts, path)
-			// vhost, err := ac.createVhost()
+			vhost, err := ac.createVhost(path)
+
+			if err != nil {
+				continue
+			}
+
+			ac.vhosts = append(ac.vhosts, vhost)
 		}
 	}
 
 	return ac.vhosts, nil
 }
 
-//func (ac *ApacheConfigurator) createVhost() (interface{}, error) {
-//
-//}
+func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, error) {
+	args, err := ac.Parser.Augeas.Match(fmt.Sprintf("%s/arg", path))
+
+	if err != nil {
+		return nil, err
+	}
+
+	addrs := make(map[string]entity.Address)
+
+	for _, arg := range args {
+		arg, err = ac.Parser.GetArg(arg)
+
+		if err != nil {
+			return nil, err
+		}
+
+		addr := entity.CreateVhostAddressFromString(arg)
+		addrs[addr.GetHash()] = addr
+	}
+
+	var ssl bool
+	sslDirectiveMatches, err := ac.Parser.FindDirective("SslEngine", "on", path, false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(sslDirectiveMatches) > 0 {
+		ssl = true
+	}
+
+	for _, addr := range addrs {
+		if addr.Port == "443" {
+			ssl = true
+			break
+		}
+	}
+
+	fPath, err := ac.Parser.Augeas.Get(fmt.Sprintf("/augeas/files%s/path", utils.GetFilePathFromAugPath(path)))
+
+	if err != nil {
+		return nil, err
+	}
+
+	filename := utils.GetFilePathFromAugPath(fPath)
+
+	if filename == "" {
+		return nil, nil
+	}
+
+	var macro bool
+
+	if strings.Index("/macro/", strings.ToLower(path)) != -1 {
+		macro = true
+	}
+
+	vhostEnabled := ac.Parser.IsFilenameExistInOriginalPaths(filename)
+	virtualhost := entity.VirtualHost{
+		FilePath:  filename,
+		AugPath:   path,
+		Ssl:       ssl,
+		ModMacro:  macro,
+		Enabled:   vhostEnabled,
+		Addresses: addrs,
+	}
+	ac.addServerNames(virtualhost)
+
+	return &virtualhost, err
+}
+
+func (ac *ApacheConfigurator) addServerNames(vhost entity.VirtualHost) error {
+	vhostNames, err := ac.getVhostNames(vhost.AugPath)
+
+	if err != nil {
+		return err
+	}
+
+	for _, alias := range vhostNames.ServerAliases {
+		if !vhost.ModMacro {
+			vhost.Aliases = append(vhost.Aliases, alias)
+		}
+	}
+
+	if !vhost.ModMacro {
+		vhost.ServerName = vhostNames.ServerName
+	}
+
+	return nil
+}
+
+func (ac *ApacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
+	serverNameMatch, err := ac.Parser.FindDirective("ServerName", "", path, false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	serverAliasMatch, err := ac.Parser.FindDirective("ServerAlias", "", path, false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var serverAliases []string
+	var serverName string
+
+	for _, alias := range serverAliasMatch {
+		serverAlias, err := ac.Parser.GetArg(alias)
+
+		if err != nil {
+			return nil, err // TODO may be it is better just to continue ...
+		}
+
+		serverAliases = append(serverAliases, serverAlias)
+	}
+
+	if len(serverNameMatch) > 0 {
+		serverName, err = ac.Parser.GetArg(serverNameMatch[len(serverNameMatch)-1])
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &vhsotNames{serverName, serverAliases}, nil
+}
 
 // GetDefaults returns ApacheConfiguraor default options
 func GetDefaults() map[string]string {
@@ -63,12 +195,6 @@ func GetDefaults() map[string]string {
 
 // GetApacheConfigurator returns ApacheConfigurator instance
 func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, error) {
-	parser, err := createParser(options)
-
-	if err != nil {
-		return nil, err
-	}
-
 	ctl, err := getApacheCtl(options)
 
 	if err != nil {
@@ -76,6 +202,12 @@ func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, erro
 	}
 
 	version, err := getApacheVersion(ctl)
+
+	if err != nil {
+		return nil, err
+	}
+
+	parser, err := createParser(ctl, version, options)
 
 	if err != nil {
 		return nil, err
@@ -120,10 +252,10 @@ func getApacheCtl(options map[string]string) (*ApacheCtl, error) {
 	return &ApacheCtl{BinPath: ctlOption}, nil
 }
 
-func createParser(options map[string]string) (*Parser, error) {
+func createParser(apachectl *ApacheCtl, version string, options map[string]string) (*Parser, error) {
 	serverRoot := getOption("SERVER_ROOT", options)
 	vhostRoot := getOption("VHOST_ROOT", options)
-	parser, err := GetParser(serverRoot, vhostRoot)
+	parser, err := GetParser(apachectl, version, serverRoot, vhostRoot)
 
 	if err != nil {
 		return nil, err
