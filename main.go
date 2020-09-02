@@ -18,8 +18,7 @@ func main() {
 
 	fmt.Printf("output: %v", output)
 
-	options := make(map[string]string)
-	configurator, err := a2conf.GetApacheConfigurator(options)
+	configurator, err := a2conf.GetApacheConfigurator(a2conf.GetDefaults())
 
 	if err != nil {
 		panic(fmt.Sprintf("could not create apache configurator: %v", err))
