@@ -23,6 +23,7 @@ func GetFilePathFromAugPath(vhostPath string) string {
 func splitAugPath(vhostPath string) augPathParts {
 	// exclude trailing '/files'
 	var internalPaths []string
+	var internalPath string
 	var pathExists bool
 	path := vhostPath[6:]
 	path = strings.TrimRight(path, "/")
@@ -32,7 +33,7 @@ func splitAugPath(vhostPath string) augPathParts {
 		_, err := os.Stat(path)
 
 		if err != nil {
-			internalPath, parts := parts[len(parts)-1], parts[:len(parts)-1]
+			internalPath, parts = parts[len(parts)-1], parts[:len(parts)-1]
 			internalPaths = append(internalPaths, internalPath)
 			path = strings.Join(parts, "/")
 

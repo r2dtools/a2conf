@@ -39,7 +39,7 @@ type directiveFilter struct {
 }
 
 // GetParser creates parser instance
-func GetParser(apachectl *ApacheCtl, serverRoot, version string, vhostRoot string) (*Parser, error) {
+func GetParser(apachectl *ApacheCtl, version, serverRoot, vhostRoot string) (*Parser, error) {
 	serverRoot, err := filepath.Abs(serverRoot)
 
 	if err != nil {
