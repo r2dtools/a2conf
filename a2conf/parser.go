@@ -82,6 +82,17 @@ func GetParser(apachectl *ApacheCtl, serverRoot, version string, vhostRoot strin
 	// TODO: check apache version
 	parser.UpdateRuntimeVariables()
 
+	if parser.existingPaths == nil {
+		parser.existingPaths = make(map[string][]string)
+	}
+
+	// list of the active include paths, before modifications
+	for k, v := range parser.Paths {
+		dst := make([]string, len(v))
+		copy(dst, v)
+		parser.existingPaths[k] = dst
+	}
+
 	return parser, nil
 }
 
@@ -253,10 +264,17 @@ func (p *Parser) UpdateDefines() {
 
 // UpdateIncludes gets includes from httpd process, and add them to DOM if needed
 func (p *Parser) UpdateIncludes() {
-	_, err := p.ApacheCtl.ParseIncludes()
+	p.FindDirective("Include", "", "", false)
+	matches, err := p.ApacheCtl.ParseIncludes()
 
 	if err != nil {
 		// TODO: add logging
+	}
+
+	for _, match := range matches {
+		if !p.IsFilenameExistInCurrentPaths(match) {
+			p.ParseFile(match)
+		}
 	}
 }
 
@@ -298,7 +316,7 @@ func (p *Parser) FindDirective(directive, arg, start string, exclude bool) ([]st
 		start = GetAugPath(p.configRoot)
 	}
 
-	regStr := fmt.Sprintf("(%s)|(%s)|(%s))", directive, "Include", "IncludeOptional")
+	regStr := fmt.Sprintf("(%s)|(%s)|(%s)", directive, "Include", "IncludeOptional")
 	matches, err := p.Augeas.Match(fmt.Sprintf("%s//*[self::directive=~regexp('%s', 'i')]", start, regStr))
 
 	if err != nil {

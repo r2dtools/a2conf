@@ -26,12 +26,12 @@ func splitAugPath(vhostPath string) augPathParts {
 	var pathExists bool
 	path := vhostPath[6:]
 	path = strings.TrimRight(path, "/")
-	parts := strings.Split(vhostPath, "/")
+	parts := strings.Split(path, "/")
 
 	for !pathExists {
 		_, err := os.Stat(path)
 
-		if os.IsNotExist(err) {
+		if err != nil {
 			internalPath, parts := parts[len(parts)-1], parts[:len(parts)-1]
 			internalPaths = append(internalPaths, internalPath)
 			path = strings.Join(parts, "/")

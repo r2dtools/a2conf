@@ -9,10 +9,6 @@ import (
 	"github.com/r2dtools/a2conf/a2conf/utils"
 )
 
-const (
-	APACHE_MIN_VERSION = "2.4"
-)
-
 // ApacheConfigurator manipulates with apache configs
 type ApacheConfigurator struct {
 	Parser  *Parser
@@ -126,7 +122,7 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 		Addresses: addrs,
 	}
 	ac.addServerNames(virtualhost)
-	
+
 	return &virtualhost, err
 }
 
