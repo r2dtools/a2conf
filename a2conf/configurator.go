@@ -29,7 +29,9 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 		return ac.vhosts, nil
 	}
 
-	ac.vhosts = make([]*entity.VirtualHost, 0)
+	filePaths := make(map[string]string)
+	internalPaths := make(map[string]map[string]bool)
+	var vhosts []*entity.VirtualHost
 
 	for vhostPath := range ac.Parser.Paths {
 		paths, err := ac.Parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", vhostPath))
@@ -49,9 +51,54 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 				continue
 			}
 
-			ac.vhosts = append(ac.vhosts, vhost)
+			internalPath := utils.GetFilePathFromAugPath(vhost.AugPath)
+			realPath, err := filepath.EvalSymlinks(vhost.FilePath)
+
+			if err != nil {
+				// TODO Should we skip already created vhost in this case?
+				continue
+			}
+
+			if _, ok := filePaths[realPath]; !ok {
+				filePaths[realPath] = realPath
+
+				if iPaths, ok := internalPaths[realPath]; !ok {
+					internalPaths[realPath] = map[string]bool{
+						internalPath: true,
+					}
+				} else {
+					if _, ok = iPaths[internalPath]; !ok {
+						iPaths[internalPath] = true
+					}
+				}
+
+				vhosts = append(vhosts, vhost)
+			} else if realPath == vhost.FilePath && realPath != filePaths[realPath] {
+				// Prefer "real" vhost paths instead of symlinked ones
+				// for example: sites-enabled/vh.conf -> sites-available/vh.conf
+				// remove old (most likely) symlinked one
+				var nVhosts []*entity.VirtualHost
+
+				for _, vh := range vhosts {
+					if vh.FilePath == filePaths[realPath] {
+						delete(internalPaths[realPath], utils.GetFilePathFromAugPath(vh.AugPath))
+					} else {
+						nVhosts = append(nVhosts, vh)
+					}
+				}
+
+				vhosts = nVhosts
+				filePaths[realPath] = realPath
+				internalPaths[realPath][internalPath] = true
+				vhosts = append(vhosts, vhost)
+			} else if _, ok = internalPaths[realPath]; !ok {
+				internalPaths[realPath][internalPath] = true
+				vhosts = append(vhosts, vhost)
+			}
 		}
 	}
+
+	ac.vhosts = vhosts
 
 	return ac.vhosts, nil
 }
