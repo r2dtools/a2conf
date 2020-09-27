@@ -271,6 +271,10 @@ func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, erro
 }
 
 func getOption(name string, options map[string]string) string {
+	if options == nil {
+		options = make(map[string]string)
+	}
+
 	if option, ok := options[name]; ok {
 		return option
 	}
