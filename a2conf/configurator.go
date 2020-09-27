@@ -60,7 +60,7 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 			}
 
 			if _, ok := filePaths[realPath]; !ok {
-				filePaths[realPath] = realPath
+				filePaths[realPath] = vhost.FilePath
 
 				if iPaths, ok := internalPaths[realPath]; !ok {
 					internalPaths[realPath] = map[string]bool{

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Translate converts a shell PATTERN to a regular expression string
+// TranslateFnmatchToRegex converts a shell PATTERN to a regular expression string
 func TranslateFnmatchToRegex(fnmatchStr string) string {
 	i, n := 0, len(fnmatchStr)
 	var res string

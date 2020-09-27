@@ -30,3 +30,28 @@ func TestCreateVhostAddressFromString(t *testing.T) {
 		}
 	}
 }
+
+func TestIsWildcardPort(t *testing.T) {
+	type AddrData struct {
+		AddrStr    string
+		isWildcard bool
+	}
+
+	items := []AddrData{
+		{"127.0.0.1:8080", false},
+		{"127.0.0.1", true},
+		{"127.0.0.1:*", true},
+	}
+
+	for _, item := range items {
+		address := CreateVhostAddressFromString(item.AddrStr)
+
+		if address.IsWildcardPort() != item.isWildcard {
+			if item.isWildcard {
+				t.Error("expected port to be wildcard, got non wildcard")
+			} else {
+				t.Error("expected port to be non wildcard, got wildcard")
+			}
+		}
+	}
+}
