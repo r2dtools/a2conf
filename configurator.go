@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/r2dtools/a2conf/a2conf/entity"
-	"github.com/r2dtools/a2conf/a2conf/utils"
+	"github.com/r2dtools/a2conf/entity"
+	"github.com/r2dtools/a2conf/utils"
 )
 
 // ApacheConfigurator manipulates with apache configs

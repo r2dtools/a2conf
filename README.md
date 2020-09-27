@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/r2dtools/a2conf/a2conf"
+	"github.com/r2dtools/a2conf"
 )
 
 func main() {

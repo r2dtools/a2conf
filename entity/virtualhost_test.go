@@ -3,7 +3,7 @@ package entity
 import (
 	"testing"
 
-	"github.com/r2dtools/a2conf/a2conf/utils"
+	"github.com/r2dtools/a2conf/utils"
 )
 
 func TestGetVhostNames(t *testing.T) {
