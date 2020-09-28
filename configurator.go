@@ -168,12 +168,12 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 		Enabled:   vhostEnabled,
 		Addresses: addrs,
 	}
-	ac.addServerNames(virtualhost)
+	ac.addServerNames(&virtualhost)
 
 	return &virtualhost, err
 }
 
-func (ac *ApacheConfigurator) addServerNames(vhost entity.VirtualHost) error {
+func (ac *ApacheConfigurator) addServerNames(vhost *entity.VirtualHost) error {
 	vhostNames, err := ac.getVhostNames(vhost.AugPath)
 
 	if err != nil {
