@@ -79,7 +79,6 @@ func GetParser(apachectl *ApacheCtl, version, serverRoot, vhostRoot string) (*Pa
 		return nil, fmt.Errorf("could not parse apache config: %v", err)
 	}
 
-	// TODO: check apache version
 	parser.UpdateRuntimeVariables()
 
 	if parser.existingPaths == nil {
@@ -259,17 +258,13 @@ func (p *Parser) UpdateRuntimeVariables() {
 
 // UpdateDefines Updates the map of known variables in the configuration
 func (p *Parser) UpdateDefines() {
-	p.variables, _ = p.ApacheCtl.ParseDefines()
+	p.variables, _ = p.ApacheCtl.ParseDefines() // TODO: handle error
 }
 
 // UpdateIncludes gets includes from httpd process, and add them to DOM if needed
 func (p *Parser) UpdateIncludes() {
 	p.FindDirective("Include", "", "", false)
-	matches, err := p.ApacheCtl.ParseIncludes()
-
-	if err != nil {
-		// TODO: add logging
-	}
+	matches, _ := p.ApacheCtl.ParseIncludes() // TODO: handle error
 
 	for _, match := range matches {
 		if !p.IsFilenameExistInCurrentPaths(match) {
@@ -280,7 +275,7 @@ func (p *Parser) UpdateIncludes() {
 
 // UpdateModules gets loaded modules from httpd process, and add them to DOM
 func (p *Parser) UpdateModules() {
-	matches, _ := p.ApacheCtl.ParseModules()
+	matches, _ := p.ApacheCtl.ParseModules() // TODO: handle error
 
 	for _, module := range matches {
 		p.AddModule(strings.TrimSpace(module))
@@ -491,7 +486,7 @@ func (p *Parser) getVariblesNames() []string {
 }
 
 // Checks if fPath exists in augeas paths
-// We should try to append the new fPath to augeas
+// We should try to append a new fPath to augeas
 // parser paths, and/or remove the old one with more
 // narrow matching.
 func (p *Parser) checkPath(fPath string) (useNew, removeOld bool) {

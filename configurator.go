@@ -5,8 +5,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Masterminds/semver"
 	"github.com/r2dtools/a2conf/entity"
 	"github.com/r2dtools/a2conf/utils"
+)
+
+const (
+	minApacheVersion = "2.4.0"
 )
 
 // ApacheConfigurator manipulates with apache configs
@@ -55,7 +60,7 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 			realPath, err := filepath.EvalSymlinks(vhost.FilePath)
 
 			if err != nil {
-				// TODO Should we skip already created vhost in this case?
+				// TODO: Should we skip already created vhost in this case?
 				continue
 			}
 
@@ -213,7 +218,7 @@ func (ac *ApacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
 		serverAlias, err := ac.Parser.GetArg(alias)
 
 		if err != nil {
-			return nil, err // TODO may be it is better just to continue ...
+			return nil, err // TODO: may be it is better just to continue ...
 		}
 
 		serverAliases = append(serverAliases, serverAlias)
@@ -248,10 +253,20 @@ func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, erro
 		return nil, err
 	}
 
-	version, err := getApacheVersion(ctl)
+	version, err := ctl.GetVersion()
 
 	if err != nil {
 		return nil, err
+	}
+
+	isVersionSupported, err := checkApacheMinVersion(version, minApacheVersion)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !isVersionSupported {
+		return nil, fmt.Errorf("current apache version '%s' is not supported. Minimal supported version is '%s'", version, minApacheVersion)
 	}
 
 	parser, err := createParser(ctl, version, options)
@@ -288,11 +303,6 @@ func getOption(name string, options map[string]string) string {
 	return ""
 }
 
-// TODO: Add real functionality
-func getApacheVersion(ac *ApacheCtl) (string, error) {
-	return "2.4", nil
-}
-
 func getApacheCtl(options map[string]string) (*ApacheCtl, error) {
 	ctlOption := getOption("CTL", options)
 
@@ -322,4 +332,20 @@ func createParser(apachectl *ApacheCtl, version string, options map[string]strin
 	}
 
 	return parser, nil
+}
+
+func checkApacheMinVersion(version, minVersion string) (bool, error) {
+	c, err := semver.NewConstraint(">=" + minVersion)
+
+	if err != nil {
+		return false, err
+	}
+
+	v, err := semver.NewVersion(version)
+
+	if err != nil {
+		return false, err
+	}
+
+	return c.Check(v), nil
 }

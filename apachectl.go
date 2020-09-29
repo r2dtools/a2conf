@@ -1,6 +1,7 @@
 package a2conf
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -56,6 +57,22 @@ func (a *ApacheCtl) ParseDefines() (map[string]string, error) {
 	}
 
 	return variables, nil
+}
+
+// GetVersion returns apache version
+func (a *ApacheCtl) GetVersion() (string, error) {
+	params := []string{"-v"}
+	result, err := a.parseCmdOutput(params, `(?i)Apache/([0-9\.]*)`, 1)
+
+	if err != nil {
+		return "", err
+	}
+
+	if len(result) < 1 {
+		return "", errors.New("could not detect apache version")
+	}
+
+	return result[0], nil
 }
 
 func (a *ApacheCtl) parseCmdOutput(params []string, regexpStr string, captureGroup uint) ([]string, error) {
