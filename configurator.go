@@ -160,7 +160,7 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 
 	var macro bool
 
-	if strings.Index("/macro/", strings.ToLower(path)) != -1 {
+	if strings.Index(strings.ToLower(path), "/macro/") != -1 {
 		macro = true
 	}
 
