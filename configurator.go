@@ -239,7 +239,7 @@ func (ac *ApacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
 func GetDefaults() map[string]string {
 	return map[string]string{
 		"SERVER_ROOT": "/etc/apache2",
-		"VHOST_ROOT":  "/etc/apache2/sites-available",
+		"VHOST_ROOT":  "",
 		"VHOST_FILES": "*",
 		"CTL":         "apache2ctl",
 	}
@@ -323,9 +323,10 @@ func createParser(apachectl *ApacheCtl, version string, options map[string]strin
 	}
 
 	vhostFiles := getOption("VHOST_FILES", options)
-	vhostFilesPath := filepath.Join(vhostRoot, vhostFiles)
 
-	if vhostFilesPath != "" {
+	if vhostRoot != "" && vhostFiles != "" {
+		vhostFilesPath := filepath.Join(vhostRoot, vhostFiles)
+
 		if err = parser.ParseFile(vhostFilesPath); err != nil {
 			return nil, err
 		}

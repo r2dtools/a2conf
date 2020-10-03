@@ -121,7 +121,7 @@ func (p *Parser) getConfigRoot() (string, error) {
 		configRootPath := path.Join(p.ServerRoot, config)
 		_, err := os.Stat(configRootPath)
 
-		if err != nil {
+		if err == nil {
 			p.configRoot = configRootPath
 
 			return p.configRoot, nil
@@ -263,7 +263,7 @@ func (p *Parser) UpdateDefines() {
 
 // UpdateIncludes gets includes from httpd process, and add them to DOM if needed
 func (p *Parser) UpdateIncludes() {
-	p.FindDirective("Include", "", "", false)
+	p.FindDirective("Include", "", "", true)
 	matches, _ := p.ApacheCtl.ParseIncludes() // TODO: handle error
 
 	for _, match := range matches {
@@ -421,11 +421,7 @@ func (p *Parser) getIncludePath(arg string) (string, error) {
 	arg = p.convertPathFromServerRootToAbs(arg)
 	info, err := os.Stat(arg)
 
-	if os.IsNotExist(err) {
-		return "", err
-	}
-
-	if info.IsDir() {
+	if err == nil && info.IsDir() {
 		p.ParseFile(filepath.Join(arg, "*"))
 	} else {
 		p.ParseFile(arg)
@@ -448,7 +444,9 @@ func (p *Parser) getIncludePath(arg string) (string, error) {
 }
 
 func (p *Parser) fnMatchToRegex(fnMatch string) string {
-	return utils.TranslateFnmatchToRegex(fnMatch)
+	regex := utils.TranslateFnmatchToRegex(fnMatch)
+
+	return regex[4 : len(regex)-2]
 }
 
 // convertPathFromServerRootToAbs convert path to absolute if it is relative to server root
