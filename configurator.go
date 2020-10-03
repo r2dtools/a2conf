@@ -165,9 +165,16 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 	}
 
 	vhostEnabled := ac.Parser.IsFilenameExistInOriginalPaths(filename)
+	docRoot, err := ac.getDocumentRoot(path)
+
+	if err != nil {
+		return nil, err
+	}
+
 	virtualhost := entity.VirtualHost{
 		FilePath:  filename,
 		AugPath:   path,
+		DocRoot:   docRoot,
 		Ssl:       ssl,
 		ModMacro:  macro,
 		Enabled:   vhostEnabled,
@@ -233,6 +240,30 @@ func (ac *ApacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
 	}
 
 	return &vhsotNames{serverName, serverAliases}, nil
+}
+
+func (ac *ApacheConfigurator) getDocumentRoot(path string) (string, error) {
+	var docRoot string
+	docRootMatch, err := ac.Parser.FindDirective("DocumentRoot", "", path, false)
+
+	if err != nil {
+		return "", fmt.Errorf("could not get vhost document root: %v", err)
+	}
+
+	if len(docRootMatch) > 0 {
+		docRoot, err = ac.Parser.GetArg(docRootMatch[len(docRootMatch)-1])
+
+		if err != nil {
+			return "", fmt.Errorf("could not get vhost document root: %v", err)
+		}
+
+		//  If the directory-path is not absolute then it is assumed to be relative to the ServerRoot.
+		if !strings.HasPrefix(docRoot, string(filepath.Separator)) {
+			docRoot = filepath.Join(ac.Parser.ServerRoot, docRoot)
+		}
+	}
+
+	return docRoot, nil
 }
 
 // GetDefaults returns ApacheConfiguraor default options

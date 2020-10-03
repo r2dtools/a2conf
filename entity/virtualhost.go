@@ -12,6 +12,7 @@ const (
 type VirtualHost struct {
 	FilePath,
 	ServerName,
+	DocRoot,
 	AugPath string
 	Addresses map[string]Address
 	Aliases   []string
