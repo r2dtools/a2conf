@@ -56,8 +56,12 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 				continue
 			}
 
-			internalPath := utils.GetFilePathFromAugPath(vhost.AugPath)
+			internalPath := utils.GetInternalAugPath(vhost.AugPath)
 			realPath, err := filepath.EvalSymlinks(vhost.FilePath)
+
+			if _, ok := internalPaths[realPath]; !ok {
+				internalPaths[realPath] = make(map[string]bool)
+			}
 
 			if err != nil {
 				// TODO: Should we skip already created vhost in this case?
@@ -96,7 +100,7 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 				filePaths[realPath] = realPath
 				internalPaths[realPath][internalPath] = true
 				vhosts = append(vhosts, vhost)
-			} else if _, ok = internalPaths[realPath]; !ok {
+			} else if _, ok = internalPaths[realPath][internalPath]; !ok {
 				internalPaths[realPath][internalPath] = true
 				vhosts = append(vhosts, vhost)
 			}

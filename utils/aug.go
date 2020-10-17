@@ -20,6 +20,11 @@ func GetFilePathFromAugPath(vhostPath string) string {
 	return splitAugPath(vhostPath).Filepath
 }
 
+// GetInternalAugPath returns file augeas internal path
+func GetInternalAugPath(vhostPath string) string {
+	return splitAugPath(vhostPath).InternalPath
+}
+
 func splitAugPath(vhostPath string) augPathParts {
 	// exclude trailing '/files'
 	var internalPaths []string
