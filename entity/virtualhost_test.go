@@ -3,7 +3,7 @@ package entity
 import (
 	"testing"
 
-	"github.com/r2dtools/a2conf/utils"
+	"github.com/unknwon/com"
 )
 
 func TestGetVhostNames(t *testing.T) {
@@ -35,7 +35,7 @@ func TestGetVhostNames(t *testing.T) {
 		}
 
 		for _, name := range names {
-			if !utils.SliceContainsString(item.names, name) {
+			if !com.IsSliceContainsStr(item.names, name) {
 				t.Errorf("invalid vhost name: %s", name)
 			}
 		}

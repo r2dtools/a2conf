@@ -1,30 +1,27 @@
 package utils
 
-import "testing"
+import (
+	"testing"
 
-type scTestItem struct {
-	values   []string
-	search   string
-	contains bool
-}
+	"github.com/unknwon/com"
+)
 
-var scTests = []scTestItem{
-	{[]string{"test1", "test 2", "test_3"}, "test 2", true},
-	{[]string{"test1", "test 2", "test_3"}, "test 4", false},
-	{[]string{}, "test 2", false},
-	{nil, "test 2", false},
-}
+func TestStrSlicesDifference(t *testing.T) {
+	type testData struct {
+		a, b, diff []string
+	}
 
-func TestSliceContains(t *testing.T) {
-	for _, item := range scTests {
-		sContains := SliceContainsString(item.values, item.search)
+	items := []testData{
+		{[]string{"a", "b", "c", "d"}, []string{"a", "d"}, []string{"b", "c"}},
+		{[]string{"a", "d"}, []string{"a", "b", "c", "d"}, []string{}},
+		{[]string{"a", "b", "c", "d"}, []string{"e", "f"}, []string{"a", "b", "c", "d"}},
+	}
 
-		if sContains != item.contains {
-			t.Error(
-				"for", item.values,
-				"expected", item.contains,
-				"actual", sContains,
-			)
+	for _, item := range items {
+		diff := StrSlicesDifference(item.a, item.b)
+
+		if !com.CompareSliceStr(diff, item.diff) {
+			t.Errorf("expected %v, got %v", item.diff, diff)
 		}
 	}
 }

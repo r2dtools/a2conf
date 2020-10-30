@@ -55,3 +55,23 @@ func TestIsWildcardPort(t *testing.T) {
 		}
 	}
 }
+
+func TestGetNomalizedIpv6(t *testing.T) {
+	type Ipv6Data struct {
+		ipv6Addr, normaliedIpv6 string
+	}
+
+	items := []Ipv6Data{
+		{"[fd00:dead:beaf::1]:80", "fd00:dead:beaf:0:0:0:0:1"},
+		{"[fe80::200:f8ff:fe21:00cf]:80", "fe80:0:0:0:200:f8ff:fe21:cf"},
+	}
+
+	for _, item := range items {
+		address := CreateVhostAddressFromString(item.ipv6Addr)
+		normalizedIpv6 := address.GetNormalizedIpv6()
+
+		if normalizedIpv6 != item.normaliedIpv6 {
+			t.Errorf("expected normalized ipv6 %s, got %s", item.normaliedIpv6, normalizedIpv6)
+		}
+	}
+}
