@@ -254,9 +254,7 @@ func TestDisableDangerousForSslRewriteRules(t *testing.T) {
 }
 
 func TestGetVhosts(t *testing.T) {
-	configurator, err := GetApacheConfigurator(nil)
-	assert.Nil(t, err, fmt.Sprintf("could not creatre apache configurator: %v", err))
-
+	configurator := getConfigurator(t)
 	vhosts, err := configurator.GetVhosts()
 	assert.Nilf(t, err, "could not get vhosts: %v", err)
 
@@ -264,6 +262,14 @@ func TestGetVhosts(t *testing.T) {
 	assert.Nilf(t, err, "could not marshal vhosts: %v", err)
 	expectedVhostsJSON := getVhostsJSON(t)
 	assert.Equal(t, expectedVhostsJSON, string(vhostsJSON), "invalid vhosts")
+}
+
+func TestFindSuitableVhost(t *testing.T) {
+	configurator := getConfigurator(t)
+	vhost, err := configurator.FindSuitableVhost("example2.com", false)
+	assert.Nilf(t, err, "could not find suitable vhost: %v", err)
+	assert.NotNil(t, vhost)
+	assert.Equal(t, "example2.com", vhost.ServerName)
 }
 
 func getVhostsJSON(t *testing.T) string {
@@ -275,4 +281,11 @@ func getVhostsJSON(t *testing.T) string {
 	vhostsData := re.ReplaceAllString(string(data), "")
 
 	return vhostsData
+}
+
+func getConfigurator(t *testing.T) *ApacheConfigurator {
+	configurator, err := GetApacheConfigurator(nil)
+	assert.Nil(t, err, fmt.Sprintf("could not creatre apache configurator: %v", err))
+
+	return configurator
 }

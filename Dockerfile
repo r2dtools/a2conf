@@ -16,4 +16,4 @@ WORKDIR  $a2confDir
 COPY ./test_data/apache/example2.com.conf ${apacheAvailableSitesDir}
 RUN a2ensite example2.com.conf && a2dissite 000-default.conf
 
-CMD ["/bin/sh", "-c", "./testcmd.sh"]
+ENTRYPOINT ["/bin/sh", "./testcmd.sh"]
