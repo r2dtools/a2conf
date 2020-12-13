@@ -1,0 +1,5 @@
+{
+	"domain": "example.com",
+	"certUrl": "http://localhost:4001/acme/cert/ff029af70f659f913678691c92bf7064a3b3",
+	"certStableUrl": "http://localhost:4001/acme/cert/ff029af70f659f913678691c92bf7064a3b3"
+}

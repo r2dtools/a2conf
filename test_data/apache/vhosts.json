@@ -1,0 +1,21 @@
+[
+    {
+        "FilePath":"/etc/apache2/sites-enabled/example2.com.conf",
+        "ServerName":"example2.com",
+        "DocRoot":"/var/www/html",
+        "AugPath":"/files/etc/apache2/sites-enabled/example2.com.conf/VirtualHost",
+        "Addresses":{
+            "Kjo4MA==":{
+                "IsIpv6":false,
+                "Host":"*",
+                "Port":
+                "80"
+            }
+        },
+        "Aliases":["www.example2.com"],
+        "Ssl":false,
+        "Enabled":true,
+        "ModMacro":false,
+        "Ancestor":null
+    }
+]

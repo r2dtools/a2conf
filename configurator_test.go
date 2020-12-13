@@ -1,8 +1,14 @@
 package a2conf
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRemoveClosingVhostTag(t *testing.T) {
@@ -245,4 +251,28 @@ func TestDisableDangerousForSslRewriteRules(t *testing.T) {
 			t.Errorf("invalid 'skipped' value, expected %t, got %t", item.skipped, skipped)
 		}
 	}
+}
+
+func TestGetVhosts(t *testing.T) {
+	configurator, err := GetApacheConfigurator(nil)
+	assert.Nil(t, err, fmt.Sprintf("could not creatre apache configurator: %v", err))
+
+	vhosts, err := configurator.GetVhosts()
+	assert.Nilf(t, err, "could not get vhosts: %v", err)
+
+	vhostsJSON, err := json.Marshal(vhosts)
+	assert.Nilf(t, err, "could not marshal vhosts: %v", err)
+	expectedVhostsJSON := getVhostsJSON(t)
+	assert.Equal(t, expectedVhostsJSON, string(vhostsJSON), "invalid vhosts")
+}
+
+func getVhostsJSON(t *testing.T) string {
+	vhostsPath := "./test_data/apache/vhosts.json"
+	assert.FileExists(t, vhostsPath, "could not open vhosts file")
+	data, err := ioutil.ReadFile(vhostsPath)
+	assert.Nilf(t, err, "could not read vhosts file: %v", err)
+	re := regexp.MustCompile(`[\r\n\s]`)
+	vhostsData := re.ReplaceAllString(string(data), "")
+
+	return vhostsData
 }
