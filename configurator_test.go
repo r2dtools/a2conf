@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/r2dtools/a2conf/entity"
 	"github.com/stretchr/testify/assert"
+)
+
+const (
+	apacheDir = "./test_data/apache"
 )
 
 func TestRemoveClosingVhostTag(t *testing.T) {
@@ -266,21 +272,32 @@ func TestGetVhosts(t *testing.T) {
 
 func TestFindSuitableVhost(t *testing.T) {
 	configurator := getConfigurator(t)
-	vhost, err := configurator.FindSuitableVhost("example2.com", false)
-	assert.Nilf(t, err, "could not find suitable vhost: %v", err)
-	assert.NotNil(t, vhost)
+	vhost := getVhost(t, configurator, "example2.com")
 	assert.Equal(t, "example2.com", vhost.ServerName)
 }
 
+func TestGetVhostBlockContent(t *testing.T) {
+	configurator := getConfigurator(t)
+	vhost := getVhost(t, configurator, "example2.com")
+	content, err := configurator.getVhostBlockContent(vhost)
+	assert.Nilf(t, err, "could not get vhost block content: %v", err)
+	expectedContent := getVhostConfigContent(t, "example2.com.conf")
+	expectedContent = prepareStringToCompare(expectedContent)
+	// getVhostBlockContent returns block without ending </VirtualHost>
+	content = append(content, "</VirtualHost>")
+	actualContent := strings.Join(content, "\n")
+	actualContent = prepareStringToCompare(actualContent)
+
+	assert.Equal(t, expectedContent, actualContent)
+}
+
 func getVhostsJSON(t *testing.T) string {
-	vhostsPath := "./test_data/apache/vhosts.json"
+	vhostsPath := apacheDir + "/vhosts.json"
 	assert.FileExists(t, vhostsPath, "could not open vhosts file")
 	data, err := ioutil.ReadFile(vhostsPath)
 	assert.Nilf(t, err, "could not read vhosts file: %v", err)
-	re := regexp.MustCompile(`[\r\n\s]`)
-	vhostsData := re.ReplaceAllString(string(data), "")
 
-	return vhostsData
+	return prepareStringToCompare(string(data))
 }
 
 func getConfigurator(t *testing.T) *ApacheConfigurator {
@@ -288,4 +305,25 @@ func getConfigurator(t *testing.T) *ApacheConfigurator {
 	assert.Nil(t, err, fmt.Sprintf("could not creatre apache configurator: %v", err))
 
 	return configurator
+}
+
+func getVhost(t *testing.T, configurator *ApacheConfigurator, serverName string) *entity.VirtualHost {
+	vhost, err := configurator.FindSuitableVhost(serverName, false)
+	assert.Nilf(t, err, "could not find suitable vhost: %v", err)
+	assert.NotNil(t, vhost)
+
+	return vhost
+}
+
+func getVhostConfigContent(t *testing.T, name string) string {
+	path := filepath.Join(apacheDir, name)
+	content, err := ioutil.ReadFile(path)
+	assert.Nilf(t, err, "could not read apache vhost config file '%s' content: %v", name, err)
+
+	return string(content)
+}
+
+func prepareStringToCompare(str string) string {
+	re := regexp.MustCompile(`[\r\n\s]`)
+	return re.ReplaceAllString(string(str), "")
 }
