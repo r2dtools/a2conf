@@ -844,13 +844,13 @@ func (ac *ApacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
 	serverNameMatch, err := ac.Parser.FindDirective("ServerName", "", path, false)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed searching ServerName directive: %v", err)
 	}
 
 	serverAliasMatch, err := ac.Parser.FindDirective("ServerAlias", "", path, false)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed searching ServerAlias directive: %v", err)
 	}
 
 	var serverAliases []string

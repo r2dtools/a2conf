@@ -345,7 +345,11 @@ func (p *Parser) FindDirective(directive, arg, start string, exclude bool) ([]st
 	}
 
 	if exclude {
-		matches = p.ExcludeDirectives(matches)
+		matches, err = p.ExcludeDirectives(matches)
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var argSuffix string
@@ -404,9 +408,8 @@ func (p *Parser) FindDirective(directive, arg, start string, exclude bool) ([]st
 }
 
 // ExcludeDirectives excludes directives that are not loaded into the configuration.
-func (p *Parser) ExcludeDirectives(matches []string) []string {
+func (p *Parser) ExcludeDirectives(matches []string) ([]string, error) {
 	var validMatches []string
-
 	filters := []directiveFilter{
 		{"ifmodule", p.getModules()},
 		{"ifdefine", p.getVariblesNames()},
@@ -416,7 +419,13 @@ func (p *Parser) ExcludeDirectives(matches []string) []string {
 		isPassed := true
 
 		for _, filter := range filters {
-			if !p.isDirectivePassedFilter(match, filter) {
+			fPassed, err := p.isDirectivePassedFilter(match, filter)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to check the directive '%s' passed the filter '%s'", match, filter.Name)
+			}
+
+			if !fPassed {
 				isPassed = false
 				break
 			}
@@ -427,7 +436,7 @@ func (p *Parser) ExcludeDirectives(matches []string) []string {
 		}
 	}
 
-	return validMatches
+	return validMatches, nil
 }
 
 // AddDirective adds directive to the end of the file given by augConfPath
@@ -553,15 +562,43 @@ func (p *Parser) CreateIfModule(augConfPath string, mod string, begining bool) (
 }
 
 // isDirectivePassedFilter checks if directive can pass a filter
-func (p *Parser) isDirectivePassedFilter(match string, filter directiveFilter) bool {
+func (p *Parser) isDirectivePassedFilter(match string, filter directiveFilter) (bool, error) {
 	lMatch := strings.ToLower(match)
-	lastMAtchIds := strings.Index(lMatch, filter.Name)
+	lastMatchIdx := strings.Index(lMatch, filter.Name)
 
-	for lastMAtchIds != -1 {
+	for lastMatchIdx != -1 {
+		endOfIfIdx := strings.Index(lMatch[lastMatchIdx:], "/")
 
+		if endOfIfIdx == -1 {
+			endOfIfIdx = len(lMatch)
+		} else {
+			endOfIfIdx += lastMatchIdx
+		}
+
+		expression, err := p.Augeas.Get(match[:endOfIfIdx] + "/arg")
+
+		if err != nil {
+			return false, err
+		}
+
+		if strings.HasPrefix(expression, "!") {
+			if com.IsSliceContainsStr(filter.Value, expression[1:]) {
+				return false, nil
+			}
+		} else {
+			if !com.IsSliceContainsStr(filter.Value, expression) {
+				return false, nil
+			}
+		}
+
+		lastMatchIdx = strings.Index(lMatch[endOfIfIdx:], filter.Name)
+
+		if lastMatchIdx != -1 {
+			lastMatchIdx += endOfIfIdx
+		}
 	}
 
-	return true
+	return true, nil
 }
 
 // getIncludePath converts Apache Include directive to Augeas path
@@ -612,7 +649,7 @@ func (p *Parser) convertPathFromServerRootToAbs(path string) string {
 
 // GetModules returns loaded modules from httpd process
 func (p *Parser) getModules() []string {
-	modules := make([]string, len(p.Modules))
+	modules := make([]string, 0)
 
 	for module := range p.Modules {
 		modules = append(modules, module)

@@ -291,6 +291,32 @@ func TestGetVhostBlockContent(t *testing.T) {
 	assert.Equal(t, expectedContent, actualContent)
 }
 
+func TestGetSslVhostFilePath(t *testing.T) {
+	// TODO: implement
+}
+
+func TestGetVhostNames(t *testing.T) {
+	configurator := getConfigurator(t)
+	vhostNames, err := configurator.getVhostNames("/files/etc/apache2/sites-enabled/example2.com.conf/VirtualHost")
+	assert.Nilf(t, err, "could not get vhost names: %v", err)
+	assert.Equal(t, "example2.com", vhostNames.ServerName)
+	assert.Equal(t, 1, len(vhostNames.ServerAliases))
+	assert.Equal(t, "www.example2.com", vhostNames.ServerAliases[0])
+}
+
+func TestGetDocumentRoot(t *testing.T) {
+	configurator := getConfigurator(t)
+	docRoot, err := configurator.getDocumentRoot("/files/etc/apache2/sites-enabled/example2.com.conf/VirtualHost")
+	assert.Nilf(t, err, "could not get document root: %v", err)
+	assert.Equal(t, "/var/www/html", docRoot)
+}
+
+func TestEnsurePortIsListening(t *testing.T) {
+	configurator := getConfigurator(t)
+	err := configurator.EnsurePortIsListening("80", false)
+	assert.Nilf(t, err, "failed to ensure that port '80' is listening: %v", err)
+}
+
 func getVhostsJSON(t *testing.T) string {
 	vhostsPath := apacheDir + "/vhosts.json"
 	assert.FileExists(t, vhostsPath, "could not open vhosts file")
