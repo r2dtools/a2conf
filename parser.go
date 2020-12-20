@@ -226,7 +226,7 @@ func (p *Parser) GetAugeasError(errorsToExclude []string) error {
 }
 
 // Save saves all chages to the reconfiguratiob files
-func (p *Parser) Save() error {
+func (p *Parser) Save(reverter *Reverter) error {
 	unsavedFiles, err := p.GetUnsavedFiles()
 
 	if err != nil {
@@ -235,6 +235,12 @@ func (p *Parser) Save() error {
 
 	if len(unsavedFiles) == 0 {
 		return nil
+	}
+
+	if reverter != nil {
+		if err = reverter.BackupFiles(unsavedFiles); err != nil {
+			return err
+		}
 	}
 
 	if err = p.Augeas.Save(); err != nil {
@@ -267,7 +273,7 @@ func (p *Parser) GetArg(match string) (string, error) {
 	for _, variable := range variables {
 		variableStr := string(variable)
 		// Since variable is satisfied regex, it has at least length 3: ${}
-		variableKey := variableStr[2:len(variableStr)-1]
+		variableKey := variableStr[2 : len(variableStr)-1]
 		replaceVariable, ok := p.variables[variableKey]
 
 		if !ok {
@@ -776,7 +782,7 @@ func (p *Parser) GetUnsavedFiles() ([]string, error) {
 	}
 
 	var paths []string
-	
+
 	pathsToSave, err := p.Augeas.Match("/augeas/events/saved")
 
 	if err != nil {

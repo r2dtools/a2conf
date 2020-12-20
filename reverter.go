@@ -1,8 +1,11 @@
 package a2conf
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
+
+	"github.com/unknwon/com"
 )
 
 // Reverter reverts change back for configuration files of virtual hosts
@@ -16,9 +19,26 @@ func (r *Reverter) AddFileToDeletion(filePath string) {
 	r.filesToDelete = append(r.filesToDelete, filePath)
 }
 
+// BackupFiles makes files backups
+func (r *Reverter) BackupFiles(filePaths []string) error {
+	for _, filePath := range filePaths {
+		if err := r.BackupFile(filePath); err != nil {
+			return fmt.Errorf("could make file '%s' backup: %v", filePath, err)
+		}
+	}
+
+	return nil
+}
+
 // BackupFile makes file backup. The file content will be restored on rollback.
 func (r *Reverter) BackupFile(filePath string) error {
-	bFilePath := filePath + ".back"
+	bFilePath := r.getBackupFilePath(filePath)
+
+	if _, ok := r.filesToRestore[filePath]; ok {
+		// TODO: add logging
+		return nil
+	}
+
 	content, err := ioutil.ReadFile(filePath)
 
 	if err != nil {
@@ -83,4 +103,23 @@ func (r *Reverter) Rollback() error {
 	}
 
 	return nil
+}
+
+// Commit commits changes. All *.back files will be removed.
+func (r *Reverter) Commit() error {
+	for filePath, bFilePath := range r.filesToRestore {
+		if com.IsFile(bFilePath) {
+			os.Remove(bFilePath)
+		}
+
+		delete(r.filesToRestore, filePath)
+	}
+
+	r.filesToDelete = nil
+
+	return nil
+}
+
+func (r *Reverter) getBackupFilePath(filePath string) string {
+	return filePath + ".back"
 }

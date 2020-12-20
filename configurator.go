@@ -126,7 +126,7 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 
 // Save saves all changes
 func (ac *ApacheConfigurator) Save() error {
-	err := ac.Parser.Save()
+	err := ac.Parser.Save(ac.reverter)
 
 	if err != nil {
 		return fmt.Errorf("could not save changes: %v", err)
