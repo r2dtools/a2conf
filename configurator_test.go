@@ -292,7 +292,11 @@ func TestGetVhostBlockContent(t *testing.T) {
 }
 
 func TestGetSslVhostFilePath(t *testing.T) {
-	// TODO: implement
+	configurator := getConfigurator(t)
+	vhostPath := "/etc/apache2/sites-enabled/example2.com.conf"
+	sslVhostPath, err := configurator.getSslVhostFilePath(vhostPath)
+	assert.Nilf(t, err, "could not get ssl vhost file path: %v", err)
+	assert.Equal(t, "/etc/apache2/sites-available/example2.com-ssl.conf", sslVhostPath)
 }
 
 func TestGetVhostNames(t *testing.T) {
@@ -313,8 +317,12 @@ func TestGetDocumentRoot(t *testing.T) {
 
 func TestEnsurePortIsListening(t *testing.T) {
 	configurator := getConfigurator(t)
-	err := configurator.EnsurePortIsListening("80", false)
-	assert.Nilf(t, err, "failed to ensure that port '80' is listening: %v", err)
+	ports := []string{"80", "8080"}
+
+	for _, port := range ports {
+		err := configurator.EnsurePortIsListening(port, false)
+		assert.Nilf(t, err, "failed to ensure that port '%s' is listening: %v", port, err)
+	}
 }
 
 func getVhostsJSON(t *testing.T) string {
