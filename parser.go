@@ -139,7 +139,7 @@ func (p *Parser) setLocations() error {
 		return err
 	}
 
-	temp := filepath.Join(p.ConfigRoot, "ports.conf")
+	temp := filepath.Join(p.ServerRoot, "ports.conf")
 	if com.IsFile(temp) {
 		configListen = temp
 	} else {
@@ -206,11 +206,23 @@ func (p *Parser) GetAugeasError(errorsToExclude []string) error {
 		}
 	}
 
-	if len(rootErrors) > 0 {
-		return fmt.Errorf(strings.Join(rootErrors, ", "))
+	if len(rootErrors) == 0 {
+		return nil
 	}
 
-	return nil
+	var detailedRootErrors []string
+
+	for _, rError := range rootErrors {
+		details, _ := p.Augeas.Get(rError)
+
+		if details == "" {
+			detailedRootErrors = append(detailedRootErrors, rError)
+		} else {
+			detailedRootErrors = append(detailedRootErrors, fmt.Sprintf("%s: %s", rError, details))
+		}
+	}
+
+	return fmt.Errorf(strings.Join(detailedRootErrors, ", "))
 }
 
 // Save saves all chages to the reconfiguratiob files
@@ -255,7 +267,7 @@ func (p *Parser) GetArg(match string) (string, error) {
 	for _, variable := range variables {
 		variableStr := string(variable)
 		// Since variable is satisfied regex, it has at least length 3: ${}
-		variableKey := variableStr[2 : len(variableStr)-1]
+		variableKey := variableStr[2:len(variableStr)-1]
 		replaceVariable, ok := p.variables[variableKey]
 
 		if !ok {
@@ -446,7 +458,7 @@ func (p *Parser) AddDirective(augConfPath string, directive string, args []strin
 	}
 
 	for i, arg := range args {
-		if err := p.Augeas.Set(fmt.Sprintf("%s/directive[last()]/arg[%d]", augConfPath, i), arg); err != nil {
+		if err := p.Augeas.Set(fmt.Sprintf("%s/directive[last()]/arg[%d]", augConfPath, i+1), arg); err != nil {
 			return err
 		}
 	}
@@ -752,15 +764,19 @@ func (p *Parser) GetUnsavedFiles() ([]string, error) {
 	}
 
 	if err = p.Augeas.Save(); err != nil {
+		p.Augeas.Set("/augeas/save", saveMethod)
 		return nil, err
 	}
 
-	// Return previous save method
-	if err = p.Augeas.Set("/augeas/save", saveMethod); err != nil {
-		return nil, err
+	saveErr := p.GetAugeasError(nil)
+	p.Augeas.Set("/augeas/save", saveMethod)
+
+	if saveErr != nil {
+		return nil, saveErr
 	}
 
 	var paths []string
+	
 	pathsToSave, err := p.Augeas.Match("/augeas/events/saved")
 
 	if err != nil {
