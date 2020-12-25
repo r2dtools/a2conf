@@ -782,14 +782,19 @@ func (p *Parser) GetUnsavedFiles() ([]string, error) {
 	}
 
 	var paths []string
-
-	pathsToSave, err := p.Augeas.Match("/augeas/events/saved")
+	matchesToSave, err := p.Augeas.Match("/augeas/events/saved")
 
 	if err != nil {
 		return nil, err
 	}
 
-	for _, pathToSave := range pathsToSave {
+	for _, matchToSave := range matchesToSave {
+		pathToSave, err := p.Augeas.Get(matchToSave)
+
+		if err != nil {
+			return nil, err
+		}
+
 		paths = append(paths, pathToSave[6:])
 	}
 

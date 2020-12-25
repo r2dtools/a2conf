@@ -595,7 +595,7 @@ func (ac *ApacheConfigurator) copyCreateSslVhostSkeleton(noSslVhost *entity.Virt
 	}
 
 	sslVhostContent, _ := disableDangerousForSslRewriteRules(noSslVhostContents)
-	sslVhostFile, err := os.OpenFile(sslVhostFilePath, os.O_CREATE|os.O_APPEND, 0644)
+	sslVhostFile, err := os.OpenFile(sslVhostFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 
 	if err != nil {
 		return err
@@ -715,7 +715,7 @@ func (ac *ApacheConfigurator) updateSslVhostAddresses(sslVhostPath string) ([]*e
 		}
 
 		oldAddress := entity.CreateVhostAddressFromString(addrString)
-		sslAddress := oldAddress.GetAddressWithNewPort("443")
+		sslAddress := oldAddress.GetAddressWithNewPort("443") // TODO: it should be passed in an external code
 		err = ac.Parser.Augeas.Set(sslAddrMatch, sslAddress.ToString())
 
 		if err != nil {

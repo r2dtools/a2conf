@@ -23,7 +23,7 @@ func (r *Reverter) AddFileToDeletion(filePath string) {
 func (r *Reverter) BackupFiles(filePaths []string) error {
 	for _, filePath := range filePaths {
 		if err := r.BackupFile(filePath); err != nil {
-			return fmt.Errorf("could make file '%s' backup: %v", filePath, err)
+			return fmt.Errorf("could not make file '%s' backup: %v", filePath, err)
 		}
 	}
 
@@ -35,6 +35,12 @@ func (r *Reverter) BackupFile(filePath string) error {
 	bFilePath := r.getBackupFilePath(filePath)
 
 	if _, ok := r.filesToRestore[filePath]; ok {
+		// TODO: add logging
+		return nil
+	}
+
+	// Skip file backup if it should be removed
+	if com.IsSliceContainsStr(r.filesToDelete, filePath) {
 		// TODO: add logging
 		return nil
 	}
