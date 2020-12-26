@@ -1,4 +1,4 @@
-package a2conf
+package apache
 
 import (
 	"errors"
@@ -8,27 +8,27 @@ import (
 	"strings"
 )
 
-// ApacheCtl implements functions to work with apachectl cli utility
-type ApacheCtl struct {
+// Ctl implements functions to work with apachectl cli utility
+type Ctl struct {
 	BinPath string
 }
 
 // ParseIncludes returns Include directives from httpd process and returns a list of their values.
-func (a *ApacheCtl) ParseIncludes() ([]string, error) {
+func (a *Ctl) ParseIncludes() ([]string, error) {
 	params := []string{"-t", "-D", "DUMP_INCLUDES"}
 
 	return a.parseCmdOutput(params, `\(.*\) (.*)`, 1)
 }
 
 // ParseModules returns a map of the defined variables.
-func (a *ApacheCtl) ParseModules() ([]string, error) {
+func (a *Ctl) ParseModules() ([]string, error) {
 	params := []string{"-t", "-D", "DUMP_MODULES"}
 
 	return a.parseCmdOutput(params, `(.*)_module`, 1)
 }
 
 // ParseDefines return the list of loaded module names.
-func (a *ApacheCtl) ParseDefines() (map[string]string, error) {
+func (a *Ctl) ParseDefines() (map[string]string, error) {
 	params := []string{"-t", "-D", "DUMP_RUN_CFG"}
 	items, err := a.parseCmdOutput(params, `Define: ([^ \n]*)`, 1)
 
@@ -60,7 +60,7 @@ func (a *ApacheCtl) ParseDefines() (map[string]string, error) {
 }
 
 // GetVersion returns apache version
-func (a *ApacheCtl) GetVersion() (string, error) {
+func (a *Ctl) GetVersion() (string, error) {
 	params := []string{"-v"}
 	result, err := a.parseCmdOutput(params, `(?i)Apache/([0-9\.]*)`, 1)
 
@@ -75,7 +75,7 @@ func (a *ApacheCtl) GetVersion() (string, error) {
 	return result[0], nil
 }
 
-func (a *ApacheCtl) parseCmdOutput(params []string, regexpStr string, captureGroup uint) ([]string, error) {
+func (a *Ctl) parseCmdOutput(params []string, regexpStr string, captureGroup uint) ([]string, error) {
 	output, err := a.execCmd(params)
 
 	if err != nil {
@@ -98,7 +98,7 @@ func (a *ApacheCtl) parseCmdOutput(params []string, regexpStr string, captureGro
 	return rItems, nil
 }
 
-func (a *ApacheCtl) execCmd(params []string) ([]byte, error) {
+func (a *Ctl) execCmd(params []string) ([]byte, error) {
 	cmd := exec.Command(a.getCmd(), params...)
 	output, err := cmd.Output()
 
@@ -109,7 +109,7 @@ func (a *ApacheCtl) execCmd(params []string) ([]byte, error) {
 	return output, nil
 }
 
-func (a *ApacheCtl) getCmd() string {
+func (a *Ctl) getCmd() string {
 	if a.BinPath == "" {
 		return "apache2ctl"
 	}

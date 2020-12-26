@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/huandu/xstrings"
+	"github.com/r2dtools/a2conf/apache"
 	"github.com/r2dtools/a2conf/utils"
 	"github.com/unknwon/com"
 	"honnef.co/go/augeas"
@@ -23,7 +24,7 @@ var fnMatchChars = []string{"*", "?", "\\", "[", "]"}
 // Parser ia a wrapper under the augeas to work with httpd config
 type Parser struct {
 	Augeas          augeas.Augeas
-	ApacheCtl       *ApacheCtl
+	ApacheCtl       *apache.Ctl
 	ServerRoot      string
 	VHostRoot       string
 	ConfigRoot      string
@@ -42,7 +43,7 @@ type directiveFilter struct {
 }
 
 // GetParser creates parser instance
-func GetParser(apachectl *ApacheCtl, version, serverRoot, vhostRoot string) (*Parser, error) {
+func GetParser(apachectl *apache.Ctl, version, serverRoot, vhostRoot string) (*Parser, error) {
 	serverRoot, err := filepath.Abs(serverRoot)
 
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/r2dtools/a2conf/apache"
 	"github.com/r2dtools/a2conf/configurator"
 	"github.com/r2dtools/a2conf/entity"
 	"github.com/r2dtools/a2conf/utils"
@@ -27,7 +28,7 @@ const (
 type ApacheConfigurator struct {
 	Parser         *Parser
 	reverter       *Reverter
-	ctl            *ApacheCtl
+	ctl            *apache.Ctl
 	version        string
 	vhosts         []*entity.VirtualHost
 	suitableVhosts map[string]*entity.VirtualHost
@@ -973,17 +974,17 @@ func getOption(name string, options map[string]string) string {
 	return ""
 }
 
-func getApacheCtl(options map[string]string) (*ApacheCtl, error) {
+func getApacheCtl(options map[string]string) (*apache.Ctl, error) {
 	ctlOption := getOption("CTL", options)
 
 	if ctlOption == "" {
 		return nil, fmt.Errorf("apache2ctl command/bin path is not specified")
 	}
 
-	return &ApacheCtl{BinPath: ctlOption}, nil
+	return &apache.Ctl{BinPath: ctlOption}, nil
 }
 
-func createParser(apachectl *ApacheCtl, version string, options map[string]string) (*Parser, error) {
+func createParser(apachectl *apache.Ctl, version string, options map[string]string) (*Parser, error) {
 	serverRoot := getOption(serverRoot, options)
 	vhostRoot := getOption(vhostRoot, options)
 	parser, err := GetParser(apachectl, version, serverRoot, vhostRoot)
