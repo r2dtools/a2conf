@@ -75,6 +75,15 @@ func (a *Ctl) GetVersion() (string, error) {
 	return result[0], nil
 }
 
+// TestConfiguration checks the syntax of apache configuration files
+func (a *Ctl) TestConfiguration() error {
+	if _, err := a.execCmd([]string{"-t"}); err != nil {
+		return fmt.Errorf("invalid apache configuration: %v", err)
+	}
+
+	return nil
+}
+
 func (a *Ctl) parseCmdOutput(params []string, regexpStr string, captureGroup uint) ([]string, error) {
 	output, err := a.execCmd(params)
 
@@ -103,7 +112,7 @@ func (a *Ctl) execCmd(params []string) ([]byte, error) {
 	output, err := cmd.Output()
 
 	if err != nil {
-		return nil, fmt.Errorf("could not execute apachectl command: %v", err)
+		return nil, err
 	}
 
 	return output, nil

@@ -586,6 +586,15 @@ func (ac *ApacheConfigurator) MakeVhostSsl(noSslVhost *entity.VirtualHost) (*ent
 	return sslVhost, nil
 }
 
+// CheckConfiguration checks if apache configuration is correct
+func (ac *ApacheConfigurator) CheckConfiguration() bool {
+	if err := ac.ctl.TestConfiguration(); err != nil {
+		return false
+	}
+
+	return true
+}
+
 func (ac *ApacheConfigurator) copyCreateSslVhostSkeleton(noSslVhost *entity.VirtualHost, sslVhostFilePath string) error {
 	_, err := os.Stat(sslVhostFilePath)
 
@@ -932,6 +941,11 @@ func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, erro
 
 	if !isVersionSupported {
 		return nil, fmt.Errorf("current apache version '%s' is not supported. Minimal supported version is '%s'", version, minApacheVersion)
+	}
+
+	// Test apache configuration before creating ApacheConfigurator
+	if err = ctl.TestConfiguration(); err != nil {
+		return nil, err
 	}
 
 	parser, err := createParser(ctl, version, options)
