@@ -11,6 +11,7 @@ import (
 
 	"github.com/r2dtools/a2conf/entity"
 	"github.com/stretchr/testify/assert"
+	"github.com/unknwon/com"
 )
 
 const (
@@ -323,6 +324,31 @@ func TestEnsurePortIsListening(t *testing.T) {
 		err := configurator.EnsurePortIsListening(port, false)
 		assert.Nilf(t, err, "failed to ensure that port '%s' is listening: %v", port, err)
 	}
+}
+
+func TestMakeVhostSsl(t *testing.T) {
+	configurator := getConfigurator(t)
+	vhost := getVhost(t, configurator, "example2.com")
+	sslVhost, err := configurator.MakeVhostSsl(vhost)
+	assert.Nilf(t, err, "could not get ssl vhost: %v", err)
+	sslConfigFilePath := "/etc/apache2/sites-available/example2.com-ssl.conf"
+	assert.Equal(t, sslConfigFilePath, sslVhost.FilePath)
+	// Check that ssl config file realy exists
+	assert.Equal(t, true, com.IsFile(sslConfigFilePath))
+	assert.Equal(t, vhost.ServerName, sslVhost.ServerName)
+	assert.Equal(t, vhost.DocRoot, sslVhost.DocRoot)
+	assert.Equal(t, true, sslVhost.Ssl)
+	assert.Equal(t, false, sslVhost.Enabled)
+	assert.Equal(t, false, sslVhost.ModMacro)
+
+	// Check that addresses are corerct for ssl vhost
+	var addresses []entity.Address
+	for _, address := range sslVhost.Addresses {
+		addresses = append(addresses, address)
+	}
+
+	assert.Equal(t, 1, len(addresses))
+	assert.Equal(t, "*:443", addresses[0].ToString())
 }
 
 func getVhostsJSON(t *testing.T) string {
