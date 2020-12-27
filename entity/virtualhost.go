@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"path/filepath"
 	"regexp"
 )
 
@@ -46,4 +47,9 @@ func (vh *VirtualHost) GetNames() ([]string, error) {
 	}
 
 	return allNamesSlice, nil
+}
+
+// GetConfigName returns config name of a virtual hosr
+func (vh *VirtualHost) GetConfigName() string {
+	return filepath.Base(vh.FilePath)
 }

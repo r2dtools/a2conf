@@ -3,6 +3,7 @@ package entity
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/unknwon/com"
 )
 
@@ -39,5 +40,23 @@ func TestGetVhostNames(t *testing.T) {
 				t.Errorf("invalid vhost name: %s", name)
 			}
 		}
+	}
+}
+
+func TestGetConfigName(t *testing.T) {
+	type VHostsData struct {
+		filePath, configName string
+	}
+
+	items := []VHostsData{
+		{"/etc/apache2/sites-available/example.com.conf", "example.com.conf"},
+	}
+
+	for _, item := range items {
+		vhost := VirtualHost{
+			FilePath: item.filePath,
+		}
+		configName := vhost.GetConfigName()
+		assert.Equal(t, item.configName, configName)
 	}
 }

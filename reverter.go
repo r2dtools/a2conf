@@ -5,13 +5,24 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/r2dtools/a2conf/apache"
 	"github.com/unknwon/com"
 )
 
+type rollbackError struct {
+	err error
+}
+
+func (re *rollbackError) Error() string {
+	return fmt.Sprintf("rollback failed: %v", re.err)
+}
+
 // Reverter reverts change back for configuration files of virtual hosts
 type Reverter struct {
-	filesToDelete  []string
-	filesToRestore map[string]string
+	filesToDelete    []string
+	filesToRestore   map[string]string
+	configsToDisable []string
+	apacheSite       *apache.Site
 }
 
 // AddFileToDeletion marks file to delete on rollback
@@ -66,8 +77,20 @@ func (r *Reverter) BackupFile(filePath string) error {
 	return nil
 }
 
+// AddSiteConfigToDisable marks apache site config as needed to be disabled on rollback
+func (r *Reverter) AddSiteConfigToDisable(siteConfigName string) {
+	r.configsToDisable = append(r.configsToDisable, siteConfigName)
+}
+
 // Rollback rollback all changes
 func (r *Reverter) Rollback() error {
+	// Disable all enabled before sites
+	for _, siteConfigToDisable := range r.configsToDisable {
+		if err := r.apacheSite.Disable(siteConfigToDisable); err != nil {
+			return &rollbackError{err}
+		}
+	}
+
 	// remove created files
 	for _, fileToDelete := range r.filesToDelete {
 		_, err := os.Stat(fileToDelete)
@@ -77,13 +100,13 @@ func (r *Reverter) Rollback() error {
 		}
 
 		if err != nil {
-			return err
+			return &rollbackError{err}
 		}
 
 		err = os.Remove(fileToDelete)
 
 		if err != nil {
-			return err
+			return &rollbackError{err}
 		}
 	}
 
@@ -96,13 +119,13 @@ func (r *Reverter) Rollback() error {
 		bContent, err := ioutil.ReadFile(bFilePath)
 
 		if err != nil {
-			return err
+			return &rollbackError{err}
 		}
 
 		err = ioutil.WriteFile(originFilePath, bContent, 0644)
 
 		if err != nil {
-			return err
+			return &rollbackError{err}
 		}
 
 		os.Remove(bFilePath)

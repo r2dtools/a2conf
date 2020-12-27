@@ -11,17 +11,13 @@ import (
 	"github.com/r2dtools/a2conf/apache"
 	"github.com/r2dtools/a2conf/configurator"
 	"github.com/r2dtools/a2conf/entity"
+	opts "github.com/r2dtools/a2conf/options"
 	"github.com/r2dtools/a2conf/utils"
 	"github.com/unknwon/com"
 )
 
 const (
 	minApacheVersion = "2.4.0"
-	vhostRoot        = "VHOST_ROOT"
-	serverRoot       = "SERVER_ROOT"
-	vhostFiles       = "VHOST_FILES"
-	apacheCtl        = "CTL"
-	sslVhostlExt     = "SSL_VHOST_EXT"
 )
 
 // ApacheConfigurator manipulates with apache configs
@@ -29,6 +25,7 @@ type ApacheConfigurator struct {
 	Parser         *Parser
 	reverter       *Reverter
 	ctl            *apache.Ctl
+	site           *apache.Site
 	version        string
 	vhosts         []*entity.VirtualHost
 	suitableVhosts map[string]*entity.VirtualHost
@@ -216,9 +213,20 @@ func (ac *ApacheConfigurator) DeployCertificate(serverName, certPath, certKeyPat
 // EnableSite enables an available site
 func (ac *ApacheConfigurator) EnableSite(vhost *entity.VirtualHost) error {
 	if vhost.Enabled {
+		// TODO: add logging
 		return nil
 	}
 
+	// First, try to enable vhost via a2ensite utility
+	err := ac.site.Enable(vhost.GetConfigName())
+
+	if err == nil {
+		ac.reverter.AddSiteConfigToDisable(vhost.GetConfigName())
+		vhost.Enabled = true
+		return nil
+	}
+
+	// If vhost could not be enabled via a2ensite, than try to enable it via Include directive in apache config
 	if !ac.Parser.IsFilenameExistInOriginalPaths(vhost.FilePath) {
 		if err := ac.Parser.AddInclude(ac.Parser.ConfigRoot, vhost.FilePath); err != nil {
 			return fmt.Errorf("could not enable vhsot '%s': %v", vhost.FilePath, err)
@@ -667,7 +675,7 @@ func (ac *ApacheConfigurator) getVhostBlockContent(vhost *entity.VirtualHost) ([
 }
 
 func (ac *ApacheConfigurator) getSslVhostFilePath(noSslVhostFilePath string) (string, error) {
-	vhostRoot := getOption(vhostRoot, ac.options)
+	vhostRoot := opts.GetOption(opts.VhostRoot, ac.options)
 	var filePath string
 	var err error
 
@@ -691,7 +699,7 @@ func (ac *ApacheConfigurator) getSslVhostFilePath(noSslVhostFilePath string) (st
 		}
 	}
 
-	sslVhostExt := getOption(sslVhostlExt, ac.options)
+	sslVhostExt := opts.GetOption(opts.SslVhostlExt, ac.options)
 
 	if strings.HasSuffix(filePath, ".conf") {
 		return filePath[:len(filePath)-len("conf.")] + sslVhostExt, nil
@@ -902,18 +910,6 @@ func (ac *ApacheConfigurator) getDocumentRoot(path string) (string, error) {
 	return docRoot, nil
 }
 
-// GetDefaults returns ApacheConfigurator default options
-func GetDefaults() map[string]string {
-	defaults := make(map[string]string)
-	defaults[serverRoot] = "/etc/apache2"
-	defaults[vhostRoot] = ""
-	defaults[vhostFiles] = "*"
-	defaults[apacheCtl] = "apache2ctl"
-	defaults[sslVhostlExt] = "-ssl.conf"
-
-	return defaults
-}
-
 // GetApacheConfigurator returns ApacheConfigurator instance
 func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, error) {
 	ctl, err := getApacheCtl(options)
@@ -946,8 +942,9 @@ func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, erro
 
 	configurator := ApacheConfigurator{
 		Parser:         parser,
-		reverter:       &Reverter{},
+		reverter:       &Reverter{apacheSite: apache.GetApacheSite(options)},
 		ctl:            ctl,
+		site:           &apache.Site{},
 		options:        options,
 		version:        version,
 		suitableVhosts: make(map[string]*entity.VirtualHost),
@@ -956,26 +953,8 @@ func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, erro
 	return &configurator, nil
 }
 
-func getOption(name string, options map[string]string) string {
-	if options == nil {
-		options = make(map[string]string)
-	}
-
-	if option, ok := options[name]; ok {
-		return option
-	}
-
-	defaults := GetDefaults()
-
-	if def, ok := defaults[name]; ok {
-		return def
-	}
-
-	return ""
-}
-
 func getApacheCtl(options map[string]string) (*apache.Ctl, error) {
-	ctlOption := getOption("CTL", options)
+	ctlOption := opts.GetOption(opts.ApacheCtl, options)
 
 	if ctlOption == "" {
 		return nil, fmt.Errorf("apache2ctl command/bin path is not specified")
@@ -985,15 +964,15 @@ func getApacheCtl(options map[string]string) (*apache.Ctl, error) {
 }
 
 func createParser(apachectl *apache.Ctl, version string, options map[string]string) (*Parser, error) {
-	serverRoot := getOption(serverRoot, options)
-	vhostRoot := getOption(vhostRoot, options)
+	serverRoot := opts.GetOption(opts.ServerRoot, options)
+	vhostRoot := opts.GetOption(opts.VhostRoot, options)
 	parser, err := GetParser(apachectl, version, serverRoot, vhostRoot)
 
 	if err != nil {
 		return nil, err
 	}
 
-	vhostFiles := getOption(vhostFiles, options)
+	vhostFiles := opts.GetOption(opts.VhostFiles, options)
 
 	if vhostRoot != "" && vhostFiles != "" {
 		vhostFilesPath := filepath.Join(vhostRoot, vhostFiles)
