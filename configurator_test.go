@@ -368,7 +368,7 @@ func getConfigurator(t *testing.T) *ApacheConfigurator {
 }
 
 func getVhost(t *testing.T, configurator *ApacheConfigurator, serverName string) *entity.VirtualHost {
-	vhost, err := configurator.FindSuitableVhost(serverName, false)
+	vhost, err := configurator.FindSuitableVhost(serverName)
 	assert.Nilf(t, err, "could not find suitable vhost: %v", err)
 	assert.NotNil(t, vhost)
 

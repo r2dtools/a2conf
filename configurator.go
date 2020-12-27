@@ -228,6 +228,7 @@ func (ac *ApacheConfigurator) EnableSite(vhost *entity.VirtualHost) error {
 
 	// If vhost could not be enabled via a2ensite, than try to enable it via Include directive in apache config
 	if !ac.Parser.IsFilenameExistInOriginalPaths(vhost.FilePath) {
+		// TODO: add logging
 		if err := ac.Parser.AddInclude(ac.Parser.ConfigRoot, vhost.FilePath); err != nil {
 			return fmt.Errorf("could not enable vhsot '%s': %v", vhost.FilePath, err)
 		}
@@ -467,7 +468,7 @@ func (ac *ApacheConfigurator) GetSuitableVhost(serverName string, createIfNoSsl 
 		return vhost, nil
 	}
 
-	vhost, err := ac.FindSuitableVhost(serverName, createIfNoSsl)
+	vhost, err := ac.FindSuitableVhost(serverName)
 
 	if err != nil {
 		return nil, err
@@ -496,7 +497,7 @@ func (ac *ApacheConfigurator) GetSuitableVhost(serverName string, createIfNoSsl 
 }
 
 // FindSuitableVhost tries to find a suitable virtual host for provided serverName.
-func (ac *ApacheConfigurator) FindSuitableVhost(serverName string, createIfNoSsl bool) (*entity.VirtualHost, error) {
+func (ac *ApacheConfigurator) FindSuitableVhost(serverName string) (*entity.VirtualHost, error) {
 	vhosts, err := ac.GetVhosts()
 
 	if err != nil {
@@ -755,10 +756,6 @@ func (ac *ApacheConfigurator) updateSslVhostAddresses(sslVhostPath string) ([]*e
 	}
 
 	return sslAddresses, nil
-}
-
-func (ac *ApacheConfigurator) isWildcard(serverName string) bool {
-	return strings.HasPrefix(serverName, "*.")
 }
 
 func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, error) {
