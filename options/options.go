@@ -13,7 +13,7 @@ const (
 	SslVhostlExt = "SSL_VHOST_EXT"
 	// ApacheEnsite is a command for a2ensite command or a pth to a2ensite bin
 	ApacheEnsite = "APACHE_ENSITE"
-	// Apachedissite is a command for a2dissite command or a pth to a2dissite bin
+	// ApacheDissite is a command for a2dissite command or a pth to a2dissite bin
 	ApacheDissite = "APACHE_DISSITE"
 )
 
