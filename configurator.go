@@ -299,7 +299,9 @@ func (ac *apacheConfigurator) PrepareHTTPSModules(temp bool) error {
 		return err
 	}
 
-	ac.parser.ResetModules()
+	if err := ac.parser.ResetModules(); err != nil {
+		return err
+	}
 
 	return nil
 }

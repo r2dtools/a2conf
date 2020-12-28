@@ -82,7 +82,9 @@ func GetParser(apachectl *apache.Ctl, version, serverRoot, vhostRoot string) (*P
 		return nil, fmt.Errorf("could not parse apache config: %v", err)
 	}
 
-	parser.UpdateRuntimeVariables()
+	if err = parser.UpdateRuntimeVariables(); err != nil {
+		return nil, err
+	}
 
 	if err = parser.setLocations(); err != nil {
 		parser.Close()
@@ -288,43 +290,77 @@ func (p *Parser) GetArg(match string) (string, error) {
 }
 
 // UpdateRuntimeVariables Updates Includes, Defines and Includes from httpd config dump data
-func (p *Parser) UpdateRuntimeVariables() {
-	p.UpdateDefines()
-	p.UpdateIncludes()
-	p.UpdateModules()
+func (p *Parser) UpdateRuntimeVariables() error {
+	if err := p.UpdateDefines(); err != nil {
+		return err
+	}
+
+	if err := p.UpdateIncludes(); err != nil {
+		return err
+	}
+
+	if err := p.UpdateModules(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // UpdateDefines Updates the map of known variables in the configuration
-func (p *Parser) UpdateDefines() {
-	p.variables, _ = p.ApacheCtl.ParseDefines() // TODO: handle error
+func (p *Parser) UpdateDefines() error {
+	variables, err := p.ApacheCtl.ParseDefines()
+
+	if err != nil {
+		return fmt.Errorf("could not parse defines: %v", err)
+	}
+
+	p.variables = variables
+
+	return nil
 }
 
 // UpdateIncludes gets includes from httpd process, and add them to DOM if needed
-func (p *Parser) UpdateIncludes() {
+func (p *Parser) UpdateIncludes() error {
 	p.FindDirective("Include", "", "", true)
-	matches, _ := p.ApacheCtl.ParseIncludes() // TODO: handle error
+	matches, err := p.ApacheCtl.ParseIncludes()
+
+	if err != nil {
+		return fmt.Errorf("could not update inlcludes: %v", err)
+	}
 
 	for _, match := range matches {
 		if !p.IsFilenameExistInCurrentPaths(match) {
 			p.ParseFile(match)
 		}
 	}
+
+	return nil
 }
 
 // UpdateModules gets loaded modules from httpd process, and add them to DOM
-func (p *Parser) UpdateModules() {
-	matches, _ := p.ApacheCtl.ParseModules() // TODO: handle error, add logging
+func (p *Parser) UpdateModules() error {
+	matches, err := p.ApacheCtl.ParseModules()
+
+	if err != nil {
+		return err
+	}
 
 	for _, module := range matches {
 		p.AddModule(strings.TrimSpace(module))
 	}
+
+	return nil
 }
 
 // ResetModules resets the loaded modules list
-func (p *Parser) ResetModules() {
+func (p *Parser) ResetModules() error {
 	p.Modules = make(map[string]bool)
-	p.UpdateModules()
+	if err := p.UpdateModules(); err != nil {
+		return err
+	}
+
 	// p.ParseModules() TODO: apache config should be also parsed for LoadModule directive
+	return nil
 }
 
 // AddModule shortcut for updating parser modules.
