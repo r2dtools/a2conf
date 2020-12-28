@@ -62,6 +62,7 @@ func (ac *apacheConfigurator) GetParser() *Parser {
 // SetLogger sets configurator logger
 func (ac *apacheConfigurator) SetLogger(logger logger.Logger) {
 	ac.logger = logger
+	ac.reverter.SetLogger(logger)
 }
 
 // GetVhosts returns configured Apache vhosts
@@ -978,6 +979,7 @@ func GetApacheConfigurator(options map[string]string) (ApacheConfigurator, error
 		return nil, err
 	}
 
+	log := logger.NilLogger{}
 	parser, err := createParser(ctl, version, options)
 
 	if err != nil {
@@ -986,10 +988,10 @@ func GetApacheConfigurator(options map[string]string) (ApacheConfigurator, error
 
 	configurator := apacheConfigurator{
 		parser:         parser,
-		reverter:       &Reverter{apacheSite: apache.GetApacheSite(options)},
+		reverter:       &Reverter{apacheSite: apache.GetApacheSite(options), logger: &log},
 		ctl:            ctl,
 		site:           &apache.Site{},
-		logger:         &logger.NilLogger{},
+		logger:         &log,
 		options:        options,
 		version:        version,
 		suitableVhosts: make(map[string]*entity.VirtualHost),

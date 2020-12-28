@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/r2dtools/a2conf/apache"
+	"github.com/r2dtools/a2conf/logger"
 	"github.com/unknwon/com"
 )
 
@@ -23,6 +24,12 @@ type Reverter struct {
 	filesToRestore   map[string]string
 	configsToDisable []string
 	apacheSite       *apache.Site
+	logger           logger.Logger
+}
+
+// SetLogger sets logger
+func (r *Reverter) SetLogger(logger logger.Logger) {
+	r.logger = logger
 }
 
 // AddFileToDeletion marks file to delete on rollback
@@ -46,13 +53,13 @@ func (r *Reverter) BackupFile(filePath string) error {
 	bFilePath := r.getBackupFilePath(filePath)
 
 	if _, ok := r.filesToRestore[filePath]; ok {
-		// TODO: add logging
+		r.logger.Debug(fmt.Sprintf("file '%s' is already backed up.", filePath))
 		return nil
 	}
 
 	// Skip file backup if it should be removed
 	if com.IsSliceContainsStr(r.filesToDelete, filePath) {
-		// TODO: add logging
+		r.logger.Debug(fmt.Sprintf("file '%s' will be removed on rollback. Skip its backup.", filePath))
 		return nil
 	}
 
@@ -96,6 +103,7 @@ func (r *Reverter) Rollback() error {
 		_, err := os.Stat(fileToDelete)
 
 		if os.IsNotExist(err) {
+			r.logger.Debug(fmt.Sprintf("file '%s' does not exist. Skip its deletion.", fileToDelete))
 			continue
 		}
 
@@ -128,7 +136,9 @@ func (r *Reverter) Rollback() error {
 			return &rollbackError{err}
 		}
 
-		os.Remove(bFilePath)
+		if err := os.Remove(bFilePath); err != nil {
+			r.logger.Error(fmt.Sprintf("could not remove file '%s' on reverter rollback: %v", bFilePath, err))
+		}
 	}
 
 	return nil
@@ -138,7 +148,9 @@ func (r *Reverter) Rollback() error {
 func (r *Reverter) Commit() error {
 	for filePath, bFilePath := range r.filesToRestore {
 		if com.IsFile(bFilePath) {
-			os.Remove(bFilePath)
+			if err := os.Remove(bFilePath); err != nil {
+				r.logger.Error(fmt.Sprintf("could not remove file '%s' on reverter commit: %v", bFilePath, err))
+			}
 		}
 
 		delete(r.filesToRestore, filePath)
