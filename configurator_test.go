@@ -329,7 +329,7 @@ func TestEnsurePortIsListening(t *testing.T) {
 func TestMakeVhostSsl(t *testing.T) {
 	configurator := getConfigurator(t)
 	vhost := getVhost(t, configurator, "example2.com")
-	sslVhost, err := configurator.MakeVhostSsl(vhost)
+	sslVhost, err := configurator.makeVhostSsl(vhost)
 	assert.Nilf(t, err, "could not get ssl vhost: %v", err)
 	sslConfigFilePath := "/etc/apache2/sites-available/example2.com-ssl.conf"
 	assert.Equal(t, sslConfigFilePath, sslVhost.FilePath)
@@ -360,14 +360,14 @@ func getVhostsJSON(t *testing.T) string {
 	return prepareStringToCompare(string(data))
 }
 
-func getConfigurator(t *testing.T) *ApacheConfigurator {
+func getConfigurator(t *testing.T) *apacheConfigurator {
 	configurator, err := GetApacheConfigurator(nil)
 	assert.Nil(t, err, fmt.Sprintf("could not creatre apache configurator: %v", err))
 
-	return configurator
+	return configurator.(*apacheConfigurator)
 }
 
-func getVhost(t *testing.T, configurator *ApacheConfigurator, serverName string) *entity.VirtualHost {
+func getVhost(t *testing.T, configurator ApacheConfigurator, serverName string) *entity.VirtualHost {
 	vhost, err := configurator.FindSuitableVhost(serverName)
 	assert.Nilf(t, err, "could not find suitable vhost: %v", err)
 	assert.NotNil(t, vhost)

@@ -11,6 +11,7 @@ import (
 	"github.com/r2dtools/a2conf/apache"
 	"github.com/r2dtools/a2conf/configurator"
 	"github.com/r2dtools/a2conf/entity"
+	"github.com/r2dtools/a2conf/logger"
 	opts "github.com/r2dtools/a2conf/options"
 	"github.com/r2dtools/a2conf/utils"
 	"github.com/unknwon/com"
@@ -21,11 +22,27 @@ const (
 )
 
 // ApacheConfigurator manipulates with apache configs
-type ApacheConfigurator struct {
-	Parser         *Parser
+type ApacheConfigurator interface {
+	GetParser() *Parser
+	GetVhosts() ([]*entity.VirtualHost, error)
+	Save() error
+	DeployCertificate(serverName, certPath, certKeyPath, chainPath, fullChainPath string) error
+	EnableSite(vhost *entity.VirtualHost) error
+	PrepareHTTPSModules(temp bool) error
+	EnableModule(module string, temp bool) error
+	EnsurePortIsListening(port string, https bool) error
+	GetSuitableVhost(serverName string, createIfNoSsl bool) (*entity.VirtualHost, error)
+	FindSuitableVhost(serverName string) (*entity.VirtualHost, error)
+	CheckConfiguration() bool
+	SetLogger(logger logger.Logger)
+}
+
+type apacheConfigurator struct {
+	parser         *Parser
 	reverter       *Reverter
 	ctl            *apache.Ctl
 	site           *apache.Site
+	logger         logger.Logger
 	version        string
 	vhosts         []*entity.VirtualHost
 	suitableVhosts map[string]*entity.VirtualHost
@@ -37,8 +54,18 @@ type vhsotNames struct {
 	ServerAliases []string
 }
 
+// GetParser returns augeas parser
+func (ac *apacheConfigurator) GetParser() *Parser {
+	return ac.parser
+}
+
+// SetLogger sets configurator logger
+func (ac *apacheConfigurator) SetLogger(logger logger.Logger) {
+	ac.logger = logger
+}
+
 // GetVhosts returns configured Apache vhosts
-func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
+func (ac *apacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 	if ac.vhosts != nil {
 		return ac.vhosts, nil
 	}
@@ -47,8 +74,8 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 	internalPaths := make(map[string]map[string]bool)
 	var vhosts []*entity.VirtualHost
 
-	for vhostPath := range ac.Parser.Paths {
-		paths, err := ac.Parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", vhostPath))
+	for vhostPath := range ac.parser.Paths {
+		paths, err := ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", vhostPath))
 
 		if err != nil {
 			continue
@@ -62,6 +89,7 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 			vhost, err := ac.createVhost(path)
 
 			if err != nil {
+				ac.logger.Error(fmt.Sprintf("error occured while creating vhost '%s': %v", vhost.FilePath, err))
 				continue
 			}
 
@@ -73,7 +101,7 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 			}
 
 			if err != nil {
-				// TODO: Should we skip already created vhost in this case?
+				ac.logger.Error(fmt.Sprintf("failed to eval symlinks for vhost '%s': %v", vhost.FilePath, err))
 				continue
 			}
 
@@ -123,8 +151,8 @@ func (ac *ApacheConfigurator) GetVhosts() ([]*entity.VirtualHost, error) {
 }
 
 // Save saves all changes
-func (ac *ApacheConfigurator) Save() error {
-	err := ac.Parser.Save(ac.reverter)
+func (ac *apacheConfigurator) Save() error {
+	err := ac.parser.Save(ac.reverter)
 
 	if err != nil {
 		return fmt.Errorf("could not save changes: %v", err)
@@ -134,7 +162,7 @@ func (ac *ApacheConfigurator) Save() error {
 }
 
 // DeployCertificate installs certificate to a domain
-func (ac *ApacheConfigurator) DeployCertificate(serverName, certPath, certKeyPath, chainPath, fullChainPath string) error {
+func (ac *apacheConfigurator) DeployCertificate(serverName, certPath, certKeyPath, chainPath, fullChainPath string) error {
 	var err error
 	var vhost *entity.VirtualHost
 
@@ -142,11 +170,11 @@ func (ac *ApacheConfigurator) DeployCertificate(serverName, certPath, certKeyPat
 		return err
 	}
 
-	if err = ac.PrepareServerForHTTPS("443", false); err != nil {
+	if err = ac.prepareServerForHTTPS("443", false); err != nil {
 		return err
 	}
 
-	if _, ok := ac.Parser.Modules["ssl_module"]; !ok {
+	if _, ok := ac.parser.Modules["ssl_module"]; !ok {
 		return errors.New("could not find ssl_module")
 	}
 
@@ -158,12 +186,12 @@ func (ac *ApacheConfigurator) DeployCertificate(serverName, certPath, certKeyPat
 		return err
 	}
 
-	augCertPath, err := ac.Parser.FindDirective("SSLCertificateFile", "", vhost.AugPath, true)
+	augCertPath, err := ac.parser.FindDirective("SSLCertificateFile", "", vhost.AugPath, true)
 	if err != nil {
 		return fmt.Errorf("error while searching directive 'SSLCertificateFile': %v", err)
 	}
 
-	augCertKeyPath, err := ac.Parser.FindDirective("SSLCertificateKeyFile", "", vhost.AugPath, true)
+	augCertKeyPath, err := ac.parser.FindDirective("SSLCertificateKeyFile", "", vhost.AugPath, true)
 	if err != nil {
 		return fmt.Errorf("error while searching directive 'SSLCertificateKeyFile': %v", err)
 	}
@@ -174,15 +202,15 @@ func (ac *ApacheConfigurator) DeployCertificate(serverName, certPath, certKeyPat
 	}
 
 	if !res || (chainPath != "" && fullChainPath == "") {
-		if err = ac.Parser.Augeas.Set(augCertPath[len(augCertPath)-1], certPath); err != nil {
+		if err = ac.parser.Augeas.Set(augCertPath[len(augCertPath)-1], certPath); err != nil {
 			return fmt.Errorf("could not set certificate path for vhost '%s': %v", serverName, err)
 		}
-		if err = ac.Parser.Augeas.Set(augCertKeyPath[len(augCertKeyPath)-1], certKeyPath); err != nil {
+		if err = ac.parser.Augeas.Set(augCertKeyPath[len(augCertKeyPath)-1], certKeyPath); err != nil {
 			return fmt.Errorf("could not set certificate key path for vhost '%s': %v", serverName, err)
 		}
 
 		if chainPath != "" {
-			if err = ac.Parser.AddDirective(vhost.AugPath, "SSLCertificateChainFile", []string{chainPath}); err != nil {
+			if err = ac.parser.AddDirective(vhost.AugPath, "SSLCertificateChainFile", []string{chainPath}); err != nil {
 				return fmt.Errorf("could not add 'SSLCertificateChainFile' directive to vhost '%s': %v", serverName, err)
 			}
 		} else {
@@ -193,10 +221,10 @@ func (ac *ApacheConfigurator) DeployCertificate(serverName, certPath, certKeyPat
 			return errors.New("SSL certificate fullchain path is required, but is not specified")
 		}
 
-		if err = ac.Parser.Augeas.Set(augCertPath[len(augCertPath)-1], fullChainPath); err != nil {
+		if err = ac.parser.Augeas.Set(augCertPath[len(augCertPath)-1], fullChainPath); err != nil {
 			return fmt.Errorf("could not set certificate path for vhost '%s': %v", serverName, err)
 		}
-		if err = ac.Parser.Augeas.Set(augCertKeyPath[len(augCertKeyPath)-1], certKeyPath); err != nil {
+		if err = ac.parser.Augeas.Set(augCertKeyPath[len(augCertKeyPath)-1], certKeyPath); err != nil {
 			return fmt.Errorf("could not set certificate key path for vhost '%s': %v", serverName, err)
 		}
 	}
@@ -211,9 +239,9 @@ func (ac *ApacheConfigurator) DeployCertificate(serverName, certPath, certKeyPat
 }
 
 // EnableSite enables an available site
-func (ac *ApacheConfigurator) EnableSite(vhost *entity.VirtualHost) error {
+func (ac *apacheConfigurator) EnableSite(vhost *entity.VirtualHost) error {
 	if vhost.Enabled {
-		// TODO: add logging
+		ac.logger.Debug(fmt.Sprintf("virtual host '%s' is already enabled. Skip site enabling.", vhost.FilePath))
 		return nil
 	}
 
@@ -227,9 +255,9 @@ func (ac *ApacheConfigurator) EnableSite(vhost *entity.VirtualHost) error {
 	}
 
 	// If vhost could not be enabled via a2ensite, than try to enable it via Include directive in apache config
-	if !ac.Parser.IsFilenameExistInOriginalPaths(vhost.FilePath) {
-		// TODO: add logging
-		if err := ac.Parser.AddInclude(ac.Parser.ConfigRoot, vhost.FilePath); err != nil {
+	if !ac.parser.IsFilenameExistInOriginalPaths(vhost.FilePath) {
+		ac.logger.Debug(fmt.Sprintf("try to enable virtual host '%s' via 'include' directive.", vhost.FilePath))
+		if err := ac.parser.AddInclude(ac.parser.ConfigRoot, vhost.FilePath); err != nil {
 			return fmt.Errorf("could not enable vhsot '%s': %v", vhost.FilePath, err)
 		}
 
@@ -240,7 +268,7 @@ func (ac *ApacheConfigurator) EnableSite(vhost *entity.VirtualHost) error {
 }
 
 // PrepareServerForHTTPS prepares server for https
-func (ac *ApacheConfigurator) PrepareServerForHTTPS(port string, temp bool) error {
+func (ac *apacheConfigurator) prepareServerForHTTPS(port string, temp bool) error {
 	if err := ac.PrepareHTTPSModules(temp); err != nil {
 		return err
 	}
@@ -253,8 +281,8 @@ func (ac *ApacheConfigurator) PrepareServerForHTTPS(port string, temp bool) erro
 }
 
 // PrepareHTTPSModules enables modules required for https
-func (ac *ApacheConfigurator) PrepareHTTPSModules(temp bool) error {
-	if _, ok := ac.Parser.Modules["ssl_module"]; ok {
+func (ac *apacheConfigurator) PrepareHTTPSModules(temp bool) error {
+	if _, ok := ac.parser.Modules["ssl_module"]; ok {
 		return nil
 	}
 
@@ -267,22 +295,23 @@ func (ac *ApacheConfigurator) PrepareHTTPSModules(temp bool) error {
 		return err
 	}
 
-	if err := ac.Parser.Augeas.Load(); err != nil {
+	if err := ac.parser.Augeas.Load(); err != nil {
 		return err
 	}
 
-	ac.Parser.ResetModules()
+	ac.parser.ResetModules()
 
 	return nil
 }
 
 // EnableModule enables apache module
-func (ac *ApacheConfigurator) EnableModule(module string, temp bool) error {
+func (ac *apacheConfigurator) EnableModule(module string, temp bool) error {
 	return fmt.Errorf("apache needs to have module %s active. please install the module manually", module)
 }
 
 // EnsurePortIsListening ensures that the provided port is listening
-func (ac *ApacheConfigurator) EnsurePortIsListening(port string, https bool) error {
+// The port will be added to config file it is not listened
+func (ac *apacheConfigurator) EnsurePortIsListening(port string, https bool) error {
 	var portService string
 	var listens []string
 	var listenDirs []string
@@ -296,14 +325,14 @@ func (ac *ApacheConfigurator) EnsurePortIsListening(port string, https bool) err
 		portService = port
 	}
 
-	listenMatches, err := ac.Parser.FindDirective("Listen", "", "", true)
+	listenMatches, err := ac.parser.FindDirective("Listen", "", "", true)
 
 	if err != nil {
 		return err
 	}
 
 	for _, lMatch := range listenMatches {
-		listen, err := ac.Parser.GetArg(lMatch)
+		listen, err := ac.parser.GetArg(lMatch)
 
 		if err != nil {
 			return err
@@ -315,6 +344,7 @@ func (ac *ApacheConfigurator) EnsurePortIsListening(port string, https bool) err
 	}
 
 	if configurator.IsPortListened(listens, port) {
+		ac.logger.Debug(fmt.Sprintf("port %s is already listended.", port))
 		return nil
 	}
 
@@ -349,23 +379,23 @@ func (ac *ApacheConfigurator) EnsurePortIsListening(port string, https bool) err
 	return nil
 }
 
-func (ac *ApacheConfigurator) addDummySSLDirectives(vhPath string) error {
-	if err := ac.Parser.AddDirective(vhPath, "SSLEngine", []string{"on"}); err != nil {
+func (ac *apacheConfigurator) addDummySSLDirectives(vhPath string) error {
+	if err := ac.parser.AddDirective(vhPath, "SSLEngine", []string{"on"}); err != nil {
 		return fmt.Errorf("could not add 'SSLEngine' directive to vhost %s: %v", vhPath, err)
 	}
 
-	if err := ac.Parser.AddDirective(vhPath, "SSLCertificateFile", []string{"insert_cert_file_path"}); err != nil {
+	if err := ac.parser.AddDirective(vhPath, "SSLCertificateFile", []string{"insert_cert_file_path"}); err != nil {
 		return fmt.Errorf("could not add 'SSLCertificateFile' directive to vhost %s: %v", vhPath, err)
 	}
 
-	if err := ac.Parser.AddDirective(vhPath, "SSLCertificateKeyFile", []string{"insert_key_file_path"}); err != nil {
+	if err := ac.parser.AddDirective(vhPath, "SSLCertificateKeyFile", []string{"insert_key_file_path"}); err != nil {
 		return fmt.Errorf("could not add 'SSLCertificateKeyFile' directive to vhost %s: %v", vhPath, err)
 	}
 
 	return nil
 }
 
-func (ac *ApacheConfigurator) cleanSSLVhost(vhost *entity.VirtualHost) error {
+func (ac *apacheConfigurator) cleanSSLVhost(vhost *entity.VirtualHost) error {
 	if err := ac.deduplicateDirectives(vhost.AugPath, []string{"SSLCertificateFile", "SSLCertificateKeyFile"}); err != nil {
 		return err
 	}
@@ -377,9 +407,9 @@ func (ac *ApacheConfigurator) cleanSSLVhost(vhost *entity.VirtualHost) error {
 	return nil
 }
 
-func (ac *ApacheConfigurator) deduplicateDirectives(vhPath string, directives []string) error {
+func (ac *apacheConfigurator) deduplicateDirectives(vhPath string, directives []string) error {
 	for _, directive := range directives {
-		directivePaths, err := ac.Parser.FindDirective(directive, "", vhPath, false)
+		directivePaths, err := ac.parser.FindDirective(directive, "", vhPath, false)
 
 		if err != nil {
 			return err
@@ -390,7 +420,7 @@ func (ac *ApacheConfigurator) deduplicateDirectives(vhPath string, directives []
 		if len(directivePaths) > 1 {
 			dps := directivePaths[:len(directivePaths)-1]
 			for _, dp := range dps {
-				ac.Parser.Augeas.Remove(reg.ReplaceAllString(dp, ""))
+				ac.parser.Augeas.Remove(reg.ReplaceAllString(dp, ""))
 			}
 		}
 	}
@@ -398,9 +428,9 @@ func (ac *ApacheConfigurator) deduplicateDirectives(vhPath string, directives []
 	return nil
 }
 
-func (ac *ApacheConfigurator) removeDirectives(vhPath string, directives []string) error {
+func (ac *apacheConfigurator) removeDirectives(vhPath string, directives []string) error {
 	for _, directive := range directives {
-		directivePaths, err := ac.Parser.FindDirective(directive, "", vhPath, false)
+		directivePaths, err := ac.parser.FindDirective(directive, "", vhPath, false)
 
 		if err != nil {
 			return err
@@ -409,24 +439,24 @@ func (ac *ApacheConfigurator) removeDirectives(vhPath string, directives []strin
 		reg := regexp.MustCompile(`/\w*$`)
 
 		for _, directivePath := range directivePaths {
-			ac.Parser.Augeas.Remove(reg.ReplaceAllString(directivePath, ""))
+			ac.parser.Augeas.Remove(reg.ReplaceAllString(directivePath, ""))
 		}
 	}
 
 	return nil
 }
 
-func (ac *ApacheConfigurator) addListensForHTTP(listens []string, listensOrigin []string, port string) error {
+func (ac *apacheConfigurator) addListensForHTTP(listens []string, listensOrigin []string, port string) error {
 	newListens := utils.StrSlicesDifference(listens, listensOrigin)
-	augListenPath := GetAugPath(ac.Parser.СonfigListen)
+	augListenPath := GetAugPath(ac.parser.СonfigListen)
 
 	if com.IsSliceContainsStr(newListens, port) {
-		if err := ac.Parser.AddDirective(augListenPath, "Listen", []string{port}); err != nil {
+		if err := ac.parser.AddDirective(augListenPath, "Listen", []string{port}); err != nil {
 			return fmt.Errorf("could not add port %s to listen config: %v", port, err)
 		}
 	} else {
 		for _, listen := range listens {
-			if err := ac.Parser.AddDirective(augListenPath, "Listen", strings.Split(listen, " ")); err != nil {
+			if err := ac.parser.AddDirective(augListenPath, "Listen", strings.Split(listen, " ")); err != nil {
 				return fmt.Errorf("could not add port %s to listen config: %v", port, err)
 			}
 		}
@@ -435,9 +465,9 @@ func (ac *ApacheConfigurator) addListensForHTTP(listens []string, listensOrigin 
 	return nil
 }
 
-func (ac *ApacheConfigurator) addListensForHTTPS(listens []string, listensOrigin []string, port string) error {
+func (ac *apacheConfigurator) addListensForHTTPS(listens []string, listensOrigin []string, port string) error {
 	var portService string
-	augListenPath := GetAugPath(ac.Parser.СonfigListen)
+	augListenPath := GetAugPath(ac.parser.СonfigListen)
 	newListens := utils.StrSlicesDifference(listens, listensOrigin)
 
 	if port != "443" {
@@ -447,12 +477,12 @@ func (ac *ApacheConfigurator) addListensForHTTPS(listens []string, listensOrigin
 	}
 
 	if com.IsSliceContainsStr(newListens, port) || com.IsSliceContainsStr(newListens, portService) {
-		if err := ac.Parser.AddDirectiveToIfModSSL(augListenPath, "Listen", strings.Split(portService, " ")); err != nil {
+		if err := ac.parser.AddDirectiveToIfModSSL(augListenPath, "Listen", strings.Split(portService, " ")); err != nil {
 			return fmt.Errorf("could not add port %s to listen config: %v", port, err)
 		}
 	} else {
 		for _, listen := range listens {
-			if err := ac.Parser.AddDirectiveToIfModSSL(augListenPath, "Listen", strings.Split(listen, " ")); err != nil {
+			if err := ac.parser.AddDirectiveToIfModSSL(augListenPath, "Listen", strings.Split(listen, " ")); err != nil {
 				return fmt.Errorf("could not add port %s to listen config: %v", port, err)
 			}
 		}
@@ -463,7 +493,7 @@ func (ac *ApacheConfigurator) addListensForHTTPS(listens []string, listensOrigin
 
 // GetSuitableVhost returns suitable virtual hosts for provided serverName.
 // If createIfNoSsl is true then ssl part will be created if neccessary.
-func (ac *ApacheConfigurator) GetSuitableVhost(serverName string, createIfNoSsl bool) (*entity.VirtualHost, error) {
+func (ac *apacheConfigurator) GetSuitableVhost(serverName string, createIfNoSsl bool) (*entity.VirtualHost, error) {
 	if vhost, ok := ac.suitableVhosts[serverName]; ok {
 		return vhost, nil
 	}
@@ -484,7 +514,7 @@ func (ac *ApacheConfigurator) GetSuitableVhost(serverName string, createIfNoSsl 
 
 	if !vhost.Ssl {
 		serverName := vhost.ServerName
-		vhost, err = ac.MakeVhostSsl(vhost)
+		vhost, err = ac.makeVhostSsl(vhost)
 
 		if err != nil {
 			return nil, fmt.Errorf("could not create ssl virtual host for '%s': %v", serverName, err)
@@ -497,7 +527,7 @@ func (ac *ApacheConfigurator) GetSuitableVhost(serverName string, createIfNoSsl 
 }
 
 // FindSuitableVhost tries to find a suitable virtual host for provided serverName.
-func (ac *ApacheConfigurator) FindSuitableVhost(serverName string) (*entity.VirtualHost, error) {
+func (ac *apacheConfigurator) FindSuitableVhost(serverName string) (*entity.VirtualHost, error) {
 	vhosts, err := ac.GetVhosts()
 
 	if err != nil {
@@ -508,6 +538,7 @@ func (ac *ApacheConfigurator) FindSuitableVhost(serverName string) (*entity.Virt
 
 	for _, vhost := range vhosts {
 		if vhost.ModMacro {
+			ac.logger.Warn(fmt.Sprintf("virtual host '%s' has mod macro enabled. Skip it.", vhost.FilePath))
 			continue
 		}
 
@@ -524,8 +555,8 @@ func (ac *ApacheConfigurator) FindSuitableVhost(serverName string) (*entity.Virt
 	return suitableVhost, nil
 }
 
-// MakeVhostSsl makes an ssl virtual host version of a nonssl virtual host
-func (ac *ApacheConfigurator) MakeVhostSsl(noSslVhost *entity.VirtualHost) (*entity.VirtualHost, error) {
+// makeVhostSsl makes an ssl virtual host version of a nonssl virtual host
+func (ac *apacheConfigurator) makeVhostSsl(noSslVhost *entity.VirtualHost) (*entity.VirtualHost, error) {
 	noSslFilePath := noSslVhost.FilePath
 	sslFilePath, err := ac.getSslVhostFilePath(noSslFilePath)
 
@@ -533,7 +564,7 @@ func (ac *ApacheConfigurator) MakeVhostSsl(noSslVhost *entity.VirtualHost) (*ent
 		return nil, fmt.Errorf("could not get config file path for ssl virtual host: %v", err)
 	}
 
-	originMatches, err := ac.Parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
+	originMatches, err := ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
 
 	if err != nil {
 		return nil, err
@@ -545,8 +576,8 @@ func (ac *ApacheConfigurator) MakeVhostSsl(noSslVhost *entity.VirtualHost) (*ent
 		return nil, fmt.Errorf("could not create config for ssl virtual host: %v", err)
 	}
 
-	ac.Parser.Augeas.Load()
-	newMatches, err := ac.Parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
+	ac.parser.Augeas.Load()
+	newMatches, err := ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
 
 	if err != nil {
 		return nil, err
@@ -555,7 +586,7 @@ func (ac *ApacheConfigurator) MakeVhostSsl(noSslVhost *entity.VirtualHost) (*ent
 	sslVhostPath := getNewVhostPathFromAugesMatches(originMatches, newMatches)
 
 	if sslVhostPath == "" {
-		newMatches, err = ac.Parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
+		newMatches, err = ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
 
 		if err != nil {
 			return nil, err
@@ -588,7 +619,7 @@ func (ac *ApacheConfigurator) MakeVhostSsl(noSslVhost *entity.VirtualHost) (*ent
 }
 
 // CheckConfiguration checks if apache configuration is correct
-func (ac *ApacheConfigurator) CheckConfiguration() bool {
+func (ac *apacheConfigurator) CheckConfiguration() bool {
 	if err := ac.ctl.TestConfiguration(); err != nil {
 		return false
 	}
@@ -596,7 +627,7 @@ func (ac *ApacheConfigurator) CheckConfiguration() bool {
 	return true
 }
 
-func (ac *ApacheConfigurator) copyCreateSslVhostSkeleton(noSslVhost *entity.VirtualHost, sslVhostFilePath string) error {
+func (ac *apacheConfigurator) copyCreateSslVhostSkeleton(noSslVhost *entity.VirtualHost, sslVhostFilePath string) error {
 	_, err := os.Stat(sslVhostFilePath)
 
 	if os.IsNotExist(err) {
@@ -636,22 +667,22 @@ func (ac *ApacheConfigurator) copyCreateSslVhostSkeleton(noSslVhost *entity.Virt
 		}
 	}
 
-	if !ac.Parser.IsFilenameExistInCurrentPaths(sslVhostFilePath) {
-		err = ac.Parser.ParseFile(sslVhostFilePath)
+	if !ac.parser.IsFilenameExistInCurrentPaths(sslVhostFilePath) {
+		err = ac.parser.ParseFile(sslVhostFilePath)
 
 		if err != nil {
 			return fmt.Errorf("could not parse ssl virtual host file '%s': %v", sslVhostFilePath, err)
 		}
 	}
 
-	ac.Parser.Augeas.Set(fmt.Sprintf("/augeas/files%s/mtime", escape(sslVhostFilePath)), "0")
-	ac.Parser.Augeas.Set(fmt.Sprintf("/augeas/files%s/mtime", escape(noSslVhost.FilePath)), "0")
+	ac.parser.Augeas.Set(fmt.Sprintf("/augeas/files%s/mtime", escape(sslVhostFilePath)), "0")
+	ac.parser.Augeas.Set(fmt.Sprintf("/augeas/files%s/mtime", escape(noSslVhost.FilePath)), "0")
 
 	return nil
 }
 
-func (ac *ApacheConfigurator) getVhostBlockContent(vhost *entity.VirtualHost) ([]string, error) {
-	span, err := ac.Parser.Augeas.Span(vhost.AugPath)
+func (ac *apacheConfigurator) getVhostBlockContent(vhost *entity.VirtualHost) ([]string, error) {
+	span, err := ac.parser.Augeas.Span(vhost.AugPath)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not get VirtualHost '%s' from the file %s: %v", vhost.ServerName, vhost.FilePath, err)
@@ -684,7 +715,7 @@ func (ac *ApacheConfigurator) getVhostBlockContent(vhost *entity.VirtualHost) ([
 	return lines, nil
 }
 
-func (ac *ApacheConfigurator) getSslVhostFilePath(noSslVhostFilePath string) (string, error) {
+func (ac *apacheConfigurator) getSslVhostFilePath(noSslVhostFilePath string) (string, error) {
 	vhostRoot := opts.GetOption(opts.VhostRoot, ac.options)
 	var filePath string
 	var err error
@@ -718,16 +749,16 @@ func (ac *ApacheConfigurator) getSslVhostFilePath(noSslVhostFilePath string) (st
 	return filePath + sslVhostExt, nil
 }
 
-func (ac *ApacheConfigurator) updateSslVhostAddresses(sslVhostPath string) ([]*entity.Address, error) {
+func (ac *apacheConfigurator) updateSslVhostAddresses(sslVhostPath string) ([]*entity.Address, error) {
 	var sslAddresses []*entity.Address
-	sslAddrMatches, err := ac.Parser.Augeas.Match(sslVhostPath + "/arg")
+	sslAddrMatches, err := ac.parser.Augeas.Match(sslVhostPath + "/arg")
 
 	if err != nil {
 		return nil, err
 	}
 
 	for _, sslAddrMatch := range sslAddrMatches {
-		addrString, err := ac.Parser.GetArg(sslAddrMatch)
+		addrString, err := ac.parser.GetArg(sslAddrMatch)
 
 		if err != nil {
 			return nil, err
@@ -735,7 +766,7 @@ func (ac *ApacheConfigurator) updateSslVhostAddresses(sslVhostPath string) ([]*e
 
 		oldAddress := entity.CreateVhostAddressFromString(addrString)
 		sslAddress := oldAddress.GetAddressWithNewPort("443") // TODO: it should be passed in an external code
-		err = ac.Parser.Augeas.Set(sslAddrMatch, sslAddress.ToString())
+		err = ac.parser.Augeas.Set(sslAddrMatch, sslAddress.ToString())
 
 		if err != nil {
 			return nil, err
@@ -758,8 +789,8 @@ func (ac *ApacheConfigurator) updateSslVhostAddresses(sslVhostPath string) ([]*e
 	return sslAddresses, nil
 }
 
-func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, error) {
-	args, err := ac.Parser.Augeas.Match(fmt.Sprintf("%s/arg", path))
+func (ac *apacheConfigurator) createVhost(path string) (*entity.VirtualHost, error) {
+	args, err := ac.parser.Augeas.Match(fmt.Sprintf("%s/arg", path))
 
 	if err != nil {
 		return nil, err
@@ -768,7 +799,7 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 	addrs := make(map[string]entity.Address)
 
 	for _, arg := range args {
-		arg, err = ac.Parser.GetArg(arg)
+		arg, err = ac.parser.GetArg(arg)
 
 		if err != nil {
 			return nil, err
@@ -779,7 +810,7 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 	}
 
 	var ssl bool
-	sslDirectiveMatches, err := ac.Parser.FindDirective("SslEngine", "on", path, false)
+	sslDirectiveMatches, err := ac.parser.FindDirective("SslEngine", "on", path, false)
 
 	if err != nil {
 		return nil, err
@@ -796,7 +827,7 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 		}
 	}
 
-	fPath, err := ac.Parser.Augeas.Get(fmt.Sprintf("/augeas/files%s/path", utils.GetFilePathFromAugPath(path)))
+	fPath, err := ac.parser.Augeas.Get(fmt.Sprintf("/augeas/files%s/path", utils.GetFilePathFromAugPath(path)))
 
 	if err != nil {
 		return nil, err
@@ -814,7 +845,7 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 		macro = true
 	}
 
-	vhostEnabled := ac.Parser.IsFilenameExistInOriginalPaths(filename)
+	vhostEnabled := ac.parser.IsFilenameExistInOriginalPaths(filename)
 	docRoot, err := ac.getDocumentRoot(path)
 
 	if err != nil {
@@ -835,7 +866,7 @@ func (ac *ApacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 	return &virtualhost, err
 }
 
-func (ac *ApacheConfigurator) addServerNames(vhost *entity.VirtualHost) error {
+func (ac *apacheConfigurator) addServerNames(vhost *entity.VirtualHost) error {
 	vhostNames, err := ac.getVhostNames(vhost.AugPath)
 
 	if err != nil {
@@ -855,14 +886,14 @@ func (ac *ApacheConfigurator) addServerNames(vhost *entity.VirtualHost) error {
 	return nil
 }
 
-func (ac *ApacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
-	serverNameMatch, err := ac.Parser.FindDirective("ServerName", "", path, false)
+func (ac *apacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
+	serverNameMatch, err := ac.parser.FindDirective("ServerName", "", path, false)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed searching ServerName directive: %v", err)
 	}
 
-	serverAliasMatch, err := ac.Parser.FindDirective("ServerAlias", "", path, false)
+	serverAliasMatch, err := ac.parser.FindDirective("ServerAlias", "", path, false)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed searching ServerAlias directive: %v", err)
@@ -872,17 +903,17 @@ func (ac *ApacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
 	var serverName string
 
 	for _, alias := range serverAliasMatch {
-		serverAlias, err := ac.Parser.GetArg(alias)
+		serverAlias, err := ac.parser.GetArg(alias)
 
 		if err != nil {
-			return nil, err // TODO: may be it is better just to continue ...
+			return nil, err
 		}
 
 		serverAliases = append(serverAliases, serverAlias)
 	}
 
 	if len(serverNameMatch) > 0 {
-		serverName, err = ac.Parser.GetArg(serverNameMatch[len(serverNameMatch)-1])
+		serverName, err = ac.parser.GetArg(serverNameMatch[len(serverNameMatch)-1])
 
 		if err != nil {
 			return nil, err
@@ -892,16 +923,16 @@ func (ac *ApacheConfigurator) getVhostNames(path string) (*vhsotNames, error) {
 	return &vhsotNames{serverName, serverAliases}, nil
 }
 
-func (ac *ApacheConfigurator) getDocumentRoot(path string) (string, error) {
+func (ac *apacheConfigurator) getDocumentRoot(path string) (string, error) {
 	var docRoot string
-	docRootMatch, err := ac.Parser.FindDirective("DocumentRoot", "", path, false)
+	docRootMatch, err := ac.parser.FindDirective("DocumentRoot", "", path, false)
 
 	if err != nil {
 		return "", fmt.Errorf("could not get vhost document root: %v", err)
 	}
 
 	if len(docRootMatch) > 0 {
-		docRoot, err = ac.Parser.GetArg(docRootMatch[len(docRootMatch)-1])
+		docRoot, err = ac.parser.GetArg(docRootMatch[len(docRootMatch)-1])
 
 		if err != nil {
 			return "", fmt.Errorf("could not get vhost document root: %v", err)
@@ -909,7 +940,7 @@ func (ac *ApacheConfigurator) getDocumentRoot(path string) (string, error) {
 
 		//  If the directory-path is not absolute then it is assumed to be relative to the ServerRoot.
 		if !strings.HasPrefix(docRoot, string(filepath.Separator)) {
-			docRoot = filepath.Join(ac.Parser.ServerRoot, docRoot)
+			docRoot = filepath.Join(ac.parser.ServerRoot, docRoot)
 		}
 	}
 
@@ -917,7 +948,7 @@ func (ac *ApacheConfigurator) getDocumentRoot(path string) (string, error) {
 }
 
 // GetApacheConfigurator returns ApacheConfigurator instance
-func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, error) {
+func GetApacheConfigurator(options map[string]string) (ApacheConfigurator, error) {
 	ctl, err := getApacheCtl(options)
 
 	if err != nil {
@@ -951,11 +982,12 @@ func GetApacheConfigurator(options map[string]string) (*ApacheConfigurator, erro
 		return nil, err
 	}
 
-	configurator := ApacheConfigurator{
-		Parser:         parser,
+	configurator := apacheConfigurator{
+		parser:         parser,
 		reverter:       &Reverter{apacheSite: apache.GetApacheSite(options)},
 		ctl:            ctl,
 		site:           &apache.Site{},
+		logger:         &logger.NilLogger{},
 		options:        options,
 		version:        version,
 		suitableVhosts: make(map[string]*entity.VirtualHost),
