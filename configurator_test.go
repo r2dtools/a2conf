@@ -326,29 +326,39 @@ func TestEnsurePortIsListening(t *testing.T) {
 	}
 }
 
-func TestMakeVhostSsl(t *testing.T) {
-	configurator := getConfigurator(t)
-	vhost := getVhost(t, configurator, "example2.com")
-	sslVhost, err := configurator.makeVhostSsl(vhost)
-	assert.Nilf(t, err, "could not get ssl vhost: %v", err)
-	sslConfigFilePath := "/etc/apache2/sites-available/example2.com-ssl.conf"
-	assert.Equal(t, sslConfigFilePath, sslVhost.FilePath)
-	// Check that ssl config file realy exists
-	assert.Equal(t, true, com.IsFile(sslConfigFilePath))
-	assert.Equal(t, vhost.ServerName, sslVhost.ServerName)
-	assert.Equal(t, vhost.DocRoot, sslVhost.DocRoot)
-	assert.Equal(t, true, sslVhost.Ssl)
-	assert.Equal(t, false, sslVhost.Enabled)
-	assert.Equal(t, false, sslVhost.ModMacro)
-
-	// Check that addresses are corerct for ssl vhost
-	var addresses []entity.Address
-	for _, address := range sslVhost.Addresses {
-		addresses = append(addresses, address)
+func TestGetSuitableVhost(t *testing.T) {
+	type vhostItem struct {
+		serverName, sslConfigFilePath, docRoot string
+		ssl, enabled                           bool
 	}
 
-	assert.Equal(t, 1, len(addresses))
-	assert.Equal(t, "*:443", addresses[0].ToString())
+	configurator := getConfigurator(t)
+	vhostItems := []vhostItem{
+		{"example2.com", "/etc/apache2/sites-available/example2.com-ssl.conf", "/var/www/html", true, false},
+		{"example.com", "/etc/apache2/sites-enabled/example-ssl.com.conf", "/var/www/html", true, true},
+	}
+
+	for _, vhostItem := range vhostItems {
+		sslVhost, err := configurator.GetSuitableVhost(vhostItem.serverName, true)
+		assert.Nilf(t, err, "could not get ssl vhost: %v", err)
+		assert.Equal(t, vhostItem.sslConfigFilePath, sslVhost.FilePath)
+		// Check that ssl config file realy exists
+		assert.Equal(t, true, com.IsFile(vhostItem.sslConfigFilePath))
+		assert.Equal(t, vhostItem.serverName, sslVhost.ServerName)
+		assert.Equal(t, vhostItem.docRoot, sslVhost.DocRoot)
+		assert.Equal(t, vhostItem.ssl, sslVhost.Ssl)
+		assert.Equal(t, vhostItem.enabled, sslVhost.Enabled)
+		assert.Equal(t, false, sslVhost.ModMacro)
+
+		// Check that addresses are corerct for ssl vhost
+		var addresses []entity.Address
+		for _, address := range sslVhost.Addresses {
+			addresses = append(addresses, address)
+		}
+
+		assert.Equal(t, 1, len(addresses))
+		assert.Equal(t, "*:443", addresses[0].ToString())
+	}
 }
 
 func getVhostsJSON(t *testing.T) string {
@@ -370,7 +380,7 @@ func getConfigurator(t *testing.T) *apacheConfigurator {
 func getVhost(t *testing.T, configurator ApacheConfigurator, serverName string) *entity.VirtualHost {
 	vhost, err := configurator.FindSuitableVhost(serverName)
 	assert.Nilf(t, err, "could not find suitable vhost: %v", err)
-	assert.NotNil(t, vhost)
+	assert.NotNilf(t, vhost, "could not find suitable vhost for '%s' servername", serverName)
 
 	return vhost
 }
