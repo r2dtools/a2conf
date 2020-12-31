@@ -139,6 +139,8 @@ func (r *Reverter) Rollback() error {
 		if err := os.Remove(bFilePath); err != nil {
 			r.logger.Error(fmt.Sprintf("could not remove file '%s' on reverter rollback: %v", bFilePath, err))
 		}
+
+		delete(r.filesToRestore, originFilePath)
 	}
 
 	return nil

@@ -35,6 +35,8 @@ type ApacheConfigurator interface {
 	FindSuitableVhost(serverName string) (*entity.VirtualHost, error)
 	CheckConfiguration() bool
 	SetLogger(logger logger.Logger)
+	Commit() error
+	Rollback() error
 }
 
 type apacheConfigurator struct {
@@ -160,6 +162,16 @@ func (ac *apacheConfigurator) Save() error {
 	}
 
 	return nil
+}
+
+// Commit applies all current changes
+func (ac *apacheConfigurator) Commit() error {
+	return ac.reverter.Commit()
+}
+
+// Rollback rollbacks all current changes
+func (ac *apacheConfigurator) Rollback() error {
+	return ac.reverter.Rollback()
 }
 
 // DeployCertificate installs certificate to a domain
