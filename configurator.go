@@ -399,7 +399,7 @@ func (ac *apacheConfigurator) addDummySSLDirectives(vhPath string) error {
 }
 
 func (ac *apacheConfigurator) cleanSSLVhost(vhost *entity.VirtualHost) error {
-	if err := ac.deduplicateDirectives(vhost.AugPath, []string{"SSLCertificateFile", "SSLCertificateKeyFile"}); err != nil {
+	if err := ac.deduplicateDirectives(vhost.AugPath, []string{"SSLEngine", "SSLCertificateFile", "SSLCertificateKeyFile"}); err != nil {
 		return err
 	}
 
