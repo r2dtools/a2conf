@@ -3,9 +3,11 @@ package apache
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+	"syscall"
 )
 
 // Ctl implements functions to work with apachectl cli utility
@@ -109,6 +111,9 @@ func (a *Ctl) parseCmdOutput(params []string, regexpStr string, captureGroup uin
 
 func (a *Ctl) execCmd(params []string) ([]byte, error) {
 	cmd := exec.Command(a.getCmd(), params...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	// Increase privilege if nessesary
+	cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(os.Geteuid())}
 	output, err := cmd.Output()
 
 	if err != nil {
