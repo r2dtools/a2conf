@@ -34,6 +34,7 @@ type ApacheConfigurator interface {
 	GetSuitableVhost(serverName string, createIfNoSsl bool) (*entity.VirtualHost, error)
 	FindSuitableVhost(serverName string) (*entity.VirtualHost, error)
 	CheckConfiguration() bool
+	RestartWebServer() error
 	SetLogger(logger logger.Logger)
 	Commit() error
 	Rollback() error
@@ -640,6 +641,11 @@ func (ac *apacheConfigurator) CheckConfiguration() bool {
 	}
 
 	return true
+}
+
+// RestartWebServer restarts apache web server
+func (ac *apacheConfigurator) RestartWebServer() error {
+	return ac.ctl.Restart()
 }
 
 func (ac *apacheConfigurator) copyCreateSslVhostSkeleton(noSslVhost *entity.VirtualHost, sslVhostFilePath string) error {

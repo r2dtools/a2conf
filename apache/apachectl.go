@@ -86,6 +86,15 @@ func (a *Ctl) TestConfiguration() error {
 	return nil
 }
 
+// Restart restarts apache webserver
+func (a *Ctl) Restart() error {
+	if _, err := a.execCmd([]string{"-k", "restart"}); err != nil {
+		return fmt.Errorf("could not restart apache: %v", err)
+	}
+
+	return nil
+}
+
 func (a *Ctl) parseCmdOutput(params []string, regexpStr string, captureGroup uint) ([]string, error) {
 	output, err := a.execCmd(params)
 
