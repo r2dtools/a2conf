@@ -1020,12 +1020,13 @@ func GetApacheConfigurator(options map[string]string) (ApacheConfigurator, error
 
 func getApacheCtl(options map[string]string) (*apache.Ctl, error) {
 	ctlOption := opts.GetOption(opts.ApacheCtl, options)
+	apacheCtl, err := apache.GetApacheCtl(ctlOption)
 
-	if ctlOption == "" {
-		return nil, fmt.Errorf("apache2ctl command/bin path is not specified")
+	if err != nil {
+		return nil, err
 	}
 
-	return &apache.Ctl{BinPath: ctlOption}, nil
+	return apacheCtl, nil
 }
 
 func createParser(apachectl *apache.Ctl, version string, options map[string]string) (*Parser, error) {

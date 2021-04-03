@@ -13,6 +13,15 @@ type Ctl struct {
 	BinPath string
 }
 
+// GetApacheCtl returns apache2/httpd manager
+func GetApacheCtl(binPath string) (*Ctl, error) {
+	if binPath == "" {
+		return nil, fmt.Errorf("apache2ctl command/bin path is not specified")
+	}
+
+	return &Ctl{BinPath: binPath}, nil
+}
+
 // ParseIncludes returns Include directives from httpd process and returns a list of their values.
 func (a *Ctl) ParseIncludes() ([]string, error) {
 	params := []string{"-t", "-D", "DUMP_INCLUDES"}
@@ -117,7 +126,7 @@ func (a *Ctl) parseCmdOutput(params []string, regexpStr string, captureGroup uin
 }
 
 func (a *Ctl) execCmd(params []string) ([]byte, error) {
-	cmd := exec.Command(a.getCmd(), params...)
+	cmd := exec.Command(a.BinPath, params...)
 	output, err := cmd.Output()
 
 	if err != nil {
@@ -125,12 +134,4 @@ func (a *Ctl) execCmd(params []string) ([]byte, error) {
 	}
 
 	return output, nil
-}
-
-func (a *Ctl) getCmd() string {
-	if a.BinPath == "" {
-		return "apache2ctl"
-	}
-
-	return a.BinPath
 }
