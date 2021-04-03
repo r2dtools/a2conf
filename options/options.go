@@ -43,10 +43,10 @@ func GetOption(name string, options map[string]string) string {
 // GetDefaults returns ApacheConfigurator default options
 func GetDefaults() map[string]string {
 	defaults := make(map[string]string)
-	defaults[ServerRoot] = "/etc/apache2"
+	defaults[ServerRoot] = ""
 	defaults[VhostRoot] = ""
 	defaults[VhostFiles] = "*"
-	defaults[ApacheCtl] = "apache2ctl"
+	defaults[ApacheCtl] = ""
 	defaults[SslVhostlExt] = "-ssl.conf"
 	defaults[ApacheEnsite] = "a2ensite"
 	defaults[ApacheDissite] = "a2dissite"

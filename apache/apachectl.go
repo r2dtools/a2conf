@@ -15,8 +15,14 @@ type Ctl struct {
 
 // GetApacheCtl returns apache2/httpd manager
 func GetApacheCtl(binPath string) (*Ctl, error) {
-	if binPath == "" {
-		return nil, fmt.Errorf("apache2ctl command/bin path is not specified")
+	if binPath != "" {
+		return &Ctl{BinPath: binPath}, nil
+	}
+
+	binPath, err := detectCtlCmd()
+
+	if err != nil {
+		return nil, err
 	}
 
 	return &Ctl{BinPath: binPath}, nil
@@ -134,4 +140,18 @@ func (a *Ctl) execCmd(params []string) ([]byte, error) {
 	}
 
 	return output, nil
+}
+
+func detectCtlCmd() (string, error) {
+	ctlCmds := []string{"apache2ctl", "httpd"}
+
+	for _, ctlCmd := range ctlCmds {
+		cmd := exec.Command("which", ctlCmd)
+
+		if _, err := cmd.Output(); err == nil {
+			return ctlCmd, nil
+		}
+	}
+
+	return "", errors.New("could not find apachectl utility binary")
 }

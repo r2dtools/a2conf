@@ -20,6 +20,7 @@ const (
 )
 
 var fnMatchChars = []string{"*", "?", "\\", "[", "]"}
+var serverRootPaths = []string{"/etc/httpd", "/etc/apache2"}
 
 // Parser ia a wrapper under the augeas to work with httpd config
 type Parser struct {
@@ -44,7 +45,7 @@ type directiveFilter struct {
 
 // GetParser creates parser instance
 func GetParser(apachectl *apache.Ctl, version, serverRoot, vhostRoot string) (*Parser, error) {
-	serverRoot, err := filepath.Abs(serverRoot)
+	serverRoot, err := getServerRootPath(serverRoot)
 
 	if err != nil {
 		return nil, err
@@ -874,4 +875,19 @@ func (p *Parser) GetRootAugPath() (string, error) {
 // GetAugPath returns Augeas path for the file full path
 func GetAugPath(fullPath string) string {
 	return fmt.Sprintf("/files/%s", fullPath)
+}
+
+func getServerRootPath(serverRootPath string) (string, error) {
+	if serverRootPath != "" {
+		return filepath.Abs(serverRootPath)
+	}
+
+	// check default paths
+	for _, serverRootPath := range serverRootPaths {
+		if com.IsDir(serverRootPath) {
+			return filepath.Abs(serverRootPath)
+		}
+	}
+
+	return "", fmt.Errorf("could not find server root path")
 }
