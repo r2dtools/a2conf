@@ -1,5 +1,7 @@
 package options
 
+import "strings"
+
 const (
 	// VhostRoot is apache virtual host root directory
 	VhostRoot = "VHOST_ROOT"
@@ -19,6 +21,8 @@ const (
 
 // GetOption returns option value
 func GetOption(name string, options map[string]string) string {
+	name = strings.ToLower(name)
+
 	if options == nil {
 		options = make(map[string]string)
 	}
