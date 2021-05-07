@@ -4,19 +4,19 @@ import "strings"
 
 const (
 	// VhostRoot is apache virtual host root directory
-	VhostRoot = "VHOST_ROOT"
+	VhostRoot = "vhost_root"
 	// ServerRoot is apache root directory
-	ServerRoot = "SERVER_ROOT"
+	ServerRoot = "server_root"
 	// VhostFiles specifies config files for virtual host that will be used. By default all config files are used.
-	VhostFiles = "VHOST_FILES"
+	VhostFiles = "vhost_files"
 	// ApacheCtl is a command for apache2ctl execution or a path to apache2ctl bin
-	ApacheCtl = "CTL"
+	ApacheCtl = "ctl"
 	// SslVhostlExt postfix for config files of created SSL virtual hosts
-	SslVhostlExt = "SSL_VHOST_EXT"
+	SslVhostlExt = "ssl_vhost_ext"
 	// ApacheEnsite is a command for a2ensite command or a pth to a2ensite bin
-	ApacheEnsite = "APACHE_ENSITE"
+	ApacheEnsite = "apache_ensite"
 	// ApacheDissite is a command for a2dissite command or a pth to a2dissite bin
-	ApacheDissite = "APACHE_DISSITE"
+	ApacheDissite = "apache_dissite"
 )
 
 // GetOption returns option value
