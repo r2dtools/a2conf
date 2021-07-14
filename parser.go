@@ -51,7 +51,12 @@ func GetParser(apachectl *apache.Ctl, version, serverRoot, vhostRoot string) (*P
 		return nil, err
 	}
 
-	vhostRoot, err = filepath.Abs(vhostRoot)
+	if vhostRoot != "" {
+		vhostRoot, err = filepath.Abs(vhostRoot)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if err != nil {
 		return nil, err
@@ -87,6 +92,7 @@ func GetParser(apachectl *apache.Ctl, version, serverRoot, vhostRoot string) (*P
 		return nil, err
 	}
 
+	// try to detect apache root config file path (ex. /etc/apache2/apache2.conf), ports.conf file path
 	if err = parser.setLocations(); err != nil {
 		parser.Close()
 		return nil, err
@@ -121,6 +127,7 @@ func (p *Parser) SetBeforeDomReloadCallback(callback func(unsavedFiles []string)
 	p.beforeDomReload = callback
 }
 
+// setConfigRoot detects apache root config file
 func (p *Parser) setConfigRoot() error {
 	configs := []string{"apache2.conf", "httpd.conf", "conf/httpd.conf"}
 
