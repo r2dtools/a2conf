@@ -1,6 +1,10 @@
 package utils
 
-import "github.com/Masterminds/semver"
+import (
+	"os/exec"
+
+	"github.com/Masterminds/semver"
+)
 
 // StrSlicesDifference returns all elements of the first slice which do not present in the second one
 func StrSlicesDifference(a, b []string) []string {
@@ -35,4 +39,14 @@ func CheckMinVersion(version, minVersion string) (bool, error) {
 	}
 
 	return c.Check(v), nil
+}
+
+// IsCommandExist checks if command exists via which linus command
+func IsCommandExist(name string) bool {
+	cmd := exec.Command("which", name)
+	if _, err := cmd.Output(); err == nil {
+		return true
+	}
+
+	return false
 }

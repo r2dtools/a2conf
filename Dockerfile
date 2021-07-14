@@ -16,6 +16,8 @@ WORKDIR  $a2confDir
 
 COPY ./test_data/apache/example2.com.conf ${apacheAvailableSitesDir}
 COPY ./test_data/apache/example-ssl.com.conf ${apacheAvailableSitesDir}
-RUN a2ensite example2.com.conf && a2ensite example-ssl.com.conf && a2dissite 000-default.conf
+COPY ./test_data/apache/example3.com.conf ${apacheAvailableSitesDir}
+COPY ./test_data/apache/example3-ssl.com.conf ${apacheAvailableSitesDir}
+RUN a2ensite example3.com.conf && a2ensite example3-ssl.com.conf && a2ensite example2.com.conf && a2ensite example-ssl.com.conf && a2dissite 000-default.conf
 
 ENTRYPOINT ["/bin/sh", "./testcmd.sh"]

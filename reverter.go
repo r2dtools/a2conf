@@ -92,6 +92,7 @@ func (r *Reverter) AddSiteConfigToDisable(siteConfigName string) {
 // Rollback rollback all changes
 func (r *Reverter) Rollback() error {
 	// Disable all enabled before sites
+	// Note: only hosts enabled via a2ensite utility are in this slice
 	for _, siteConfigToDisable := range r.configsToDisable {
 		if err := r.apacheSite.Disable(siteConfigToDisable); err != nil {
 			return &rollbackError{err}

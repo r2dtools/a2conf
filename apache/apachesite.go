@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	opts "github.com/r2dtools/a2conf/options"
+	"github.com/r2dtools/a2conf/utils"
 )
 
 // Site implements functionality for site enabling/disabling
@@ -14,6 +15,10 @@ type Site struct {
 
 // Enable enables site via a2ensite utility
 func (s *Site) Enable(siteConfigName string) error {
+	if !utils.IsCommandExist("a2ensite") {
+		return fmt.Errorf("could not enable site '%s': a2ensite utility is not available", siteConfigName)
+	}
+
 	_, err := s.execCmd(s.getEnsiteCmd(), []string{siteConfigName})
 
 	if err != nil {
@@ -25,6 +30,10 @@ func (s *Site) Enable(siteConfigName string) error {
 
 // Disable disables site via a2dissite utility
 func (s *Site) Disable(siteConfigName string) error {
+	if !utils.IsCommandExist("a2dissite") {
+		return fmt.Errorf("could not disable site '%s': a2dissite utility is not available", siteConfigName)
+	}
+
 	_, err := s.execCmd(s.getDissiteCmd(), []string{siteConfigName})
 
 	if err != nil {

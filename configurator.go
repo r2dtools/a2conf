@@ -266,6 +266,8 @@ func (ac *apacheConfigurator) EnableSite(vhost *entity.VirtualHost) error {
 		ac.reverter.AddSiteConfigToDisable(vhost.GetConfigName())
 		vhost.Enabled = true
 		return nil
+	} else {
+		ac.logger.Debug(err.Error())
 	}
 
 	// If vhost could not be enabled via a2ensite, than try to enable it via Include directive in apache config
