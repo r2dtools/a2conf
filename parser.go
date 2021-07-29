@@ -224,7 +224,7 @@ func (p *Parser) GetAugeasError(errorsToExclude []string) error {
 	var detailedRootErrors []string
 
 	for _, rError := range rootErrors {
-		details, _ := p.Augeas.Get(rError)
+		details, _ := p.Augeas.Get(rError + "/message")
 
 		if details == "" {
 			detailedRootErrors = append(detailedRootErrors, rError)
