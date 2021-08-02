@@ -35,3 +35,10 @@ func TestCheckMinVersion(t *testing.T) {
 	assert.Nilf(t, err, "failed to check min version %v:", err)
 	assert.Equal(t, false, result)
 }
+
+func TestIsCommandExist(t *testing.T) {
+	result := IsCommandExist("a2ensite")
+	assert.Equal(t, true, result)
+	result = IsCommandExist("fakeCommand")
+	assert.Equal(t, false, result)
+}

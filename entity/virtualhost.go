@@ -3,6 +3,7 @@ package entity
 import (
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -52,4 +53,18 @@ func (vh *VirtualHost) GetNames() ([]string, error) {
 // GetConfigName returns config name of a virtual hosr
 func (vh *VirtualHost) GetConfigName() string {
 	return filepath.Base(vh.FilePath)
+}
+
+// GetAddressesString return address as a string: "172.10.52.2:80 172.10.52.3:8080"
+func (vh *VirtualHost) GetAddressesString(hostsOnly bool) string {
+	var addresses []string
+	for _, address := range vh.Addresses {
+		if hostsOnly {
+			addresses = append(addresses, address.Host)
+		} else {
+			addresses = append(addresses, address.ToString())
+		}
+	}
+
+	return strings.Join(addresses, " ")
 }

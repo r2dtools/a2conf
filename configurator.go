@@ -31,8 +31,8 @@ type ApacheConfigurator interface {
 	PrepareHTTPSModules(temp bool) error
 	EnableModule(module string, temp bool) error
 	EnsurePortIsListening(port string, https bool) error
-	GetSuitableVhost(serverName string, createIfNoSsl bool) (*entity.VirtualHost, error)
-	FindSuitableVhost(serverName string) (*entity.VirtualHost, error)
+	GetSuitableVhosts(serverName string, createIfNoSsl bool) ([]*entity.VirtualHost, error)
+	FindSuitableVhosts(serverName string) ([]*entity.VirtualHost, error)
 	CheckConfiguration() bool
 	RestartWebServer() error
 	SetLogger(logger logger.Logger)
@@ -41,15 +41,14 @@ type ApacheConfigurator interface {
 }
 
 type apacheConfigurator struct {
-	parser         *Parser
-	reverter       *Reverter
-	ctl            *apache.Ctl
-	site           *apache.Site
-	logger         logger.Logger
-	version        string
-	vhosts         []*entity.VirtualHost
-	suitableVhosts map[string]*entity.VirtualHost
-	options        map[string]string
+	parser   *Parser
+	reverter *Reverter
+	ctl      *apache.Ctl
+	site     *apache.Site
+	logger   logger.Logger
+	version  string
+	vhosts   []*entity.VirtualHost
+	options  map[string]string
 }
 
 type vhsotNames struct {
@@ -178,9 +177,9 @@ func (ac *apacheConfigurator) Rollback() error {
 // DeployCertificate installs certificate to a domain
 func (ac *apacheConfigurator) DeployCertificate(serverName, certPath, certKeyPath, chainPath, fullChainPath string) error {
 	var err error
-	var vhost *entity.VirtualHost
+	var vhosts []*entity.VirtualHost
 
-	if vhost, err = ac.GetSuitableVhost(serverName, true); err != nil {
+	if vhosts, err = ac.GetSuitableVhosts(serverName, true); err != nil {
 		return err
 	}
 
@@ -192,60 +191,63 @@ func (ac *apacheConfigurator) DeployCertificate(serverName, certPath, certKeyPat
 		return errors.New("could not find ssl_module")
 	}
 
-	if err = ac.addDummySSLDirectives(vhost.AugPath); err != nil {
-		return err
-	}
-
-	if err = ac.cleanSSLVhost(vhost); err != nil {
-		return err
-	}
-
-	augCertPath, err := ac.parser.FindDirective("SSLCertificateFile", "", vhost.AugPath, true)
-	if err != nil {
-		return fmt.Errorf("error while searching directive 'SSLCertificateFile': %v", err)
-	}
-
-	augCertKeyPath, err := ac.parser.FindDirective("SSLCertificateKeyFile", "", vhost.AugPath, true)
-	if err != nil {
-		return fmt.Errorf("error while searching directive 'SSLCertificateKeyFile': %v", err)
-	}
-
-	res, err := utils.CheckMinVersion(ac.version, "2.4.8")
-	if err != nil {
-		return err
-	}
-
-	if !res || (chainPath != "" && fullChainPath == "") {
-		if err = ac.parser.Augeas.Set(augCertPath[len(augCertPath)-1], certPath); err != nil {
-			return fmt.Errorf("could not set certificate path for vhost '%s': %v", serverName, err)
-		}
-		if err = ac.parser.Augeas.Set(augCertKeyPath[len(augCertKeyPath)-1], certKeyPath); err != nil {
-			return fmt.Errorf("could not set certificate key path for vhost '%s': %v", serverName, err)
+	for _, vhost := range vhosts {
+		if err = ac.cleanSSLVhost(vhost); err != nil {
+			return err
 		}
 
-		if chainPath != "" {
-			if err = ac.parser.AddDirective(vhost.AugPath, "SSLCertificateChainFile", []string{chainPath}); err != nil {
-				return fmt.Errorf("could not add 'SSLCertificateChainFile' directive to vhost '%s': %v", serverName, err)
+		if err = ac.addDummySSLDirectives(vhost.AugPath); err != nil {
+			return err
+		}
+
+		augCertPath, err := ac.parser.FindDirective("SSLCertificateFile", "", vhost.AugPath, true)
+		if err != nil {
+			return fmt.Errorf("error while searching directive 'SSLCertificateFile': %v", err)
+		}
+
+		augCertKeyPath, err := ac.parser.FindDirective("SSLCertificateKeyFile", "", vhost.AugPath, true)
+		if err != nil {
+			return fmt.Errorf("error while searching directive 'SSLCertificateKeyFile': %v", err)
+		}
+
+		res, err := utils.CheckMinVersion(ac.version, "2.4.8")
+		if err != nil {
+			return err
+		}
+
+		if !res || (chainPath != "" && fullChainPath == "") {
+			if err = ac.parser.Augeas.Set(augCertPath[len(augCertPath)-1], certPath); err != nil {
+				return fmt.Errorf("could not set certificate path for vhost '%s': %v", serverName, err)
+			}
+
+			if err = ac.parser.Augeas.Set(augCertKeyPath[len(augCertKeyPath)-1], certKeyPath); err != nil {
+				return fmt.Errorf("could not set certificate key path for vhost '%s': %v", serverName, err)
+			}
+
+			if chainPath != "" {
+				if err = ac.parser.AddDirective(vhost.AugPath, "SSLCertificateChainFile", []string{chainPath}); err != nil {
+					return fmt.Errorf("could not add 'SSLCertificateChainFile' directive to vhost '%s': %v", serverName, err)
+				}
+			} else {
+				return fmt.Errorf("SSL certificate chain path is required for the current Apache version '%s', but is not specified", ac.version)
 			}
 		} else {
-			return fmt.Errorf("SSL certificate chain path is required for the current Apache version '%s', but is not specified", ac.version)
-		}
-	} else {
-		if fullChainPath == "" {
-			return errors.New("SSL certificate fullchain path is required, but is not specified")
+			if fullChainPath == "" {
+				return errors.New("SSL certificate fullchain path is required, but is not specified")
+			}
+
+			if err = ac.parser.Augeas.Set(augCertPath[len(augCertPath)-1], fullChainPath); err != nil {
+				return fmt.Errorf("could not set certificate path for vhost '%s': %v", serverName, err)
+			}
+			if err = ac.parser.Augeas.Set(augCertKeyPath[len(augCertKeyPath)-1], certKeyPath); err != nil {
+				return fmt.Errorf("could not set certificate key path for vhost '%s': %v", serverName, err)
+			}
 		}
 
-		if err = ac.parser.Augeas.Set(augCertPath[len(augCertPath)-1], fullChainPath); err != nil {
-			return fmt.Errorf("could not set certificate path for vhost '%s': %v", serverName, err)
-		}
-		if err = ac.parser.Augeas.Set(augCertKeyPath[len(augCertKeyPath)-1], certKeyPath); err != nil {
-			return fmt.Errorf("could not set certificate key path for vhost '%s': %v", serverName, err)
-		}
-	}
-
-	if !vhost.Enabled {
-		if err = ac.EnableSite(vhost); err != nil {
-			return err
+		if !vhost.Enabled {
+			if err = ac.EnableSite(vhost); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -414,33 +416,8 @@ func (ac *apacheConfigurator) addDummySSLDirectives(vhPath string) error {
 }
 
 func (ac *apacheConfigurator) cleanSSLVhost(vhost *entity.VirtualHost) error {
-	if err := ac.deduplicateDirectives(vhost.AugPath, []string{"SSLEngine", "SSLCertificateFile", "SSLCertificateKeyFile"}); err != nil {
+	if err := ac.removeDirectives(vhost.AugPath, []string{"SSLEngine", "SSLCertificateFile", "SSLCertificateKeyFile", "SSLCertificateChainFile"}); err != nil {
 		return err
-	}
-
-	if err := ac.removeDirectives(vhost.AugPath, []string{"SSLCertificateChainFile"}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (ac *apacheConfigurator) deduplicateDirectives(vhPath string, directives []string) error {
-	for _, directive := range directives {
-		directivePaths, err := ac.parser.FindDirective(directive, "", vhPath, false)
-
-		if err != nil {
-			return err
-		}
-
-		reg := regexp.MustCompile(`/\w*$`)
-
-		if len(directivePaths) > 1 {
-			dps := directivePaths[:len(directivePaths)-1]
-			for _, dp := range dps {
-				ac.parser.Augeas.Remove(reg.ReplaceAllString(dp, ""))
-			}
-		}
 	}
 
 	return nil
@@ -509,50 +486,36 @@ func (ac *apacheConfigurator) addListensForHTTPS(listens []string, listensOrigin
 	return nil
 }
 
-// GetSuitableVhost returns suitable virtual hosts for provided serverName.
+// GetSuitableVhosts returns suitable virtual hosts for provided serverName.
 // If createIfNoSsl is true then ssl part will be created if neccessary.
-func (ac *apacheConfigurator) GetSuitableVhost(serverName string, createIfNoSsl bool) (*entity.VirtualHost, error) {
-	if vhost, ok := ac.suitableVhosts[serverName]; ok {
-		return vhost, nil
-	}
-
-	vhost, err := ac.FindSuitableVhost(serverName)
-
+func (ac *apacheConfigurator) GetSuitableVhosts(serverName string, createIfNoSsl bool) ([]*entity.VirtualHost, error) {
+	var suitableVhosts []*entity.VirtualHost
+	suitableVhosts, err := ac.FindSuitableVhosts(serverName)
 	if err != nil {
 		return nil, err
 	}
 
-	if vhost == nil {
-		return nil, fmt.Errorf("could not find suitable virtual host with ServerName: %s", serverName)
+	if len(suitableVhosts) == 0 {
+		return nil, fmt.Errorf("could not find suitable virtual hosts with ServerName: %s", serverName)
 	}
 
 	if !createIfNoSsl {
-		return vhost, nil
+		return suitableVhosts, nil
 	}
 
-	if !vhost.Ssl {
-		serverName := vhost.ServerName
-		vhost, err = ac.makeVhostSsl(vhost)
-
-		if err != nil {
-			return nil, fmt.Errorf("could not create ssl virtual host for '%s': %v", serverName, err)
-		}
-	}
-
-	ac.suitableVhosts[serverName] = vhost
-
-	return vhost, nil
+	return ac.makeSslVhosts(suitableVhosts)
 }
 
-// FindSuitableVhost tries to find a suitable virtual host for provided serverName.
-func (ac *apacheConfigurator) FindSuitableVhost(serverName string) (*entity.VirtualHost, error) {
+// FindSuitableVhosts tries to find a suitable virtual host for provided serverName.
+func (ac *apacheConfigurator) FindSuitableVhosts(serverName string) ([]*entity.VirtualHost, error) {
 	vhosts, err := ac.GetVhosts()
-
 	if err != nil {
 		return nil, err
 	}
 
-	var suitableVhost *entity.VirtualHost
+	var suitableVhosts []*entity.VirtualHost
+	var suitableNonSslVhosts []*entity.VirtualHost
+	var sslVostsAddresses []string
 
 	for _, vhost := range vhosts {
 		if vhost.ModMacro {
@@ -561,79 +524,95 @@ func (ac *apacheConfigurator) FindSuitableVhost(serverName string) (*entity.Virt
 		}
 
 		// Prefer virtual host with ssl
-		if vhost.ServerName == serverName && vhost.Ssl {
-			return vhost, nil
-		}
-
 		if vhost.ServerName == serverName {
-			suitableVhost = vhost
+			if vhost.Ssl {
+				suitableVhosts = append(suitableVhosts, vhost)
+				sslVostsAddresses = append(sslVostsAddresses, vhost.GetAddressesString(true))
+			} else {
+				suitableNonSslVhosts = append(suitableNonSslVhosts, vhost)
+			}
 		}
 	}
 
-	return suitableVhost, nil
+	for _, vhost := range suitableNonSslVhosts {
+		// skip non ssl vhosts if there is already ssl vhost with the same address
+		if !com.IsSliceContainsStr(sslVostsAddresses, vhost.GetAddressesString(true)) {
+			suitableVhosts = append(suitableVhosts, vhost)
+		}
+	}
+
+	return suitableVhosts, nil
 }
 
-// makeVhostSsl makes an ssl virtual host version of a nonssl virtual host
-func (ac *apacheConfigurator) makeVhostSsl(noSslVhost *entity.VirtualHost) (*entity.VirtualHost, error) {
-	noSslFilePath := noSslVhost.FilePath
-	sslFilePath, err := ac.getSslVhostFilePath(noSslFilePath)
+// makeSslVhosts makes an ssl virtual host version of a nonssl virtual host
+func (ac *apacheConfigurator) makeSslVhosts(vhosts []*entity.VirtualHost) ([]*entity.VirtualHost, error) {
+	var totalVhosts []*entity.VirtualHost
+	var newSslVhosts []*entity.VirtualHost
+	var newMatches []string
 
-	if err != nil {
-		return nil, fmt.Errorf("could not get config file path for ssl virtual host: %v", err)
-	}
+	for _, vhost := range vhosts {
+		if vhost.Ssl {
+			totalVhosts = append(totalVhosts, vhost)
+			continue
+		}
 
-	originMatches, err := ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
+		noSslFilePath := vhost.FilePath
+		sslFilePath, err := ac.getSslVhostFilePath(noSslFilePath)
 
-	if err != nil {
-		return nil, err
-	}
+		if err != nil {
+			return nil, fmt.Errorf("could not get config file path for ssl virtual host: %v", err)
+		}
 
-	err = ac.copyCreateSslVhostSkeleton(noSslVhost, sslFilePath)
+		originMatches, err := ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
+		if err != nil {
+			return nil, err
+		}
 
-	if err != nil {
-		return nil, fmt.Errorf("could not create config for ssl virtual host: %v", err)
-	}
+		if err = ac.copyCreateSslVhostSkeleton(vhost, sslFilePath); err != nil {
+			return nil, fmt.Errorf("could not create config for ssl virtual host: %v", err)
+		}
 
-	ac.parser.Augeas.Load()
-	newMatches, err := ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
-
-	if err != nil {
-		return nil, err
-	}
-
-	sslVhostPath := getNewVhostPathFromAugesMatches(originMatches, newMatches)
-
-	if sslVhostPath == "" {
+		// Reload augeas to take into account the new vhost
+		ac.parser.Augeas.Load()
 		newMatches, err = ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
 
 		if err != nil {
 			return nil, err
 		}
 
-		sslVhostPath = getNewVhostPathFromAugesMatches(originMatches, newMatches)
-
+		sslVhostPath := getNewVhostPathFromAugesMatches(originMatches, newMatches)
 		if sslVhostPath == "" {
-			return nil, errors.New("could not reverse map the HTTPS VirtualHost to the original")
+			newMatches, err = ac.parser.Augeas.Match(fmt.Sprintf("/files%s//*[label()=~regexp('VirtualHost', 'i')]", escape(sslFilePath)))
+
+			if err != nil {
+				return nil, err
+			}
+
+			sslVhostPath = getNewVhostPathFromAugesMatches(originMatches, newMatches)
+
+			if sslVhostPath == "" {
+				return nil, errors.New("could not reverse map the HTTPS VirtualHost to the original")
+			}
 		}
+
+		ac.updateSslVhostAddresses(sslVhostPath)
+		if err := ac.Save(); err != nil {
+			return nil, err
+		}
+
+		sslVhost, err := ac.createVhost(sslVhostPath)
+		if err != nil {
+			return nil, err
+		}
+
+		sslVhost.Ancestor = vhost
+		newSslVhosts = append(newSslVhosts, sslVhost)
 	}
 
-	ac.updateSslVhostAddresses(sslVhostPath)
-	err = ac.Save()
+	updateVhostsAugPath(newSslVhosts, newMatches)
+	totalVhosts = append(totalVhosts, newSslVhosts...)
 
-	if err != nil {
-		return nil, err
-	}
-
-	sslVhost, err := ac.createVhost(sslVhostPath)
-
-	if err != nil {
-		return nil, err
-	}
-
-	sslVhost.Ancestor = noSslVhost
-	ac.vhosts = append(ac.vhosts, sslVhost)
-
-	return sslVhost, nil
+	return totalVhosts, nil
 }
 
 // CheckConfiguration checks if apache configuration is correct
@@ -864,7 +843,7 @@ func (ac *apacheConfigurator) createVhost(path string) (*entity.VirtualHost, err
 
 	var macro bool
 
-	if strings.Index(strings.ToLower(path), "/macro/") != -1 {
+	if strings.Contains(strings.ToLower(path), "/macro/") {
 		macro = true
 	}
 
@@ -1007,14 +986,13 @@ func GetApacheConfigurator(options map[string]string) (ApacheConfigurator, error
 	}
 
 	configurator := apacheConfigurator{
-		parser:         parser,
-		reverter:       &Reverter{apacheSite: apache.GetApacheSite(options), logger: &log},
-		ctl:            ctl,
-		site:           &apache.Site{},
-		logger:         &log,
-		options:        options,
-		version:        version,
-		suitableVhosts: make(map[string]*entity.VirtualHost),
+		parser:   parser,
+		reverter: &Reverter{apacheSite: apache.GetApacheSite(options), logger: &log},
+		ctl:      ctl,
+		site:     &apache.Site{},
+		logger:   &log,
+		options:  options,
+		version:  version,
 	}
 
 	return &configurator, nil
@@ -1183,4 +1161,16 @@ func getNewVhostPathFromAugesMatches(originMatches []string, newMatches []string
 	}
 
 	return ""
+}
+
+func updateVhostsAugPath(vhosts []*entity.VirtualHost, newMatches []string) {
+	for _, newMatch := range newMatches {
+		mNewMatch := strings.Replace(newMatch, "[1]", "", -1)
+
+		for _, vhost := range vhosts {
+			if vhost.AugPath == mNewMatch {
+				vhost.AugPath = newMatch
+			}
+		}
+	}
 }

@@ -18,6 +18,8 @@ COPY ./test_data/apache/example2.com.conf ${apacheAvailableSitesDir}
 COPY ./test_data/apache/example-ssl.com.conf ${apacheAvailableSitesDir}
 COPY ./test_data/apache/example3.com.conf ${apacheAvailableSitesDir}
 COPY ./test_data/apache/example3-ssl.com.conf ${apacheAvailableSitesDir}
-RUN a2ensite example3.com.conf && a2ensite example3-ssl.com.conf && a2ensite example2.com.conf && a2ensite example-ssl.com.conf && a2dissite 000-default.conf
+COPY ./test_data/apache/example4-ssl.com.conf ${apacheAvailableSitesDir}
+COPY ./test_data/apache/example5.com.conf ${apacheAvailableSitesDir}
+RUN a2ensite example3.com.conf && a2ensite example3-ssl.com.conf && a2ensite example2.com.conf && a2ensite example-ssl.com.conf && a2ensite example4-ssl.com.conf && a2ensite example5.com.conf && a2dissite 000-default.conf
 
 ENTRYPOINT ["/bin/sh", "./testcmd.sh"]

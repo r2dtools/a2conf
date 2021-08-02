@@ -273,14 +273,14 @@ func TestGetVhosts(t *testing.T) {
 
 func TestFindSuitableVhost(t *testing.T) {
 	configurator := getConfigurator(t)
-	vhost := getVhost(t, configurator, "example2.com")
-	assert.Equal(t, "example2.com", vhost.ServerName)
+	vhosts := getVhosts(t, configurator, "example2.com")
+	assert.Equal(t, "example2.com", vhosts[0].ServerName)
 }
 
 func TestGetVhostBlockContent(t *testing.T) {
 	configurator := getConfigurator(t)
-	vhost := getVhost(t, configurator, "example2.com")
-	content, err := configurator.getVhostBlockContent(vhost)
+	vhosts := getVhosts(t, configurator, "example2.com")
+	content, err := configurator.getVhostBlockContent(vhosts[0])
 	assert.Nilf(t, err, "could not get vhost block content: %v", err)
 	expectedContent := getVhostConfigContent(t, "example2.com.conf")
 	expectedContent = prepareStringToCompare(expectedContent)
@@ -326,7 +326,7 @@ func TestEnsurePortIsListening(t *testing.T) {
 	}
 }
 
-func TestGetSuitableVhost(t *testing.T) {
+func TestGetSuitableVhostsSingle(t *testing.T) {
 	type vhostItem struct {
 		serverName, sslConfigFilePath, docRoot string
 		ssl, enabled                           bool
@@ -339,8 +339,10 @@ func TestGetSuitableVhost(t *testing.T) {
 	}
 
 	for _, vhostItem := range vhostItems {
-		sslVhost, err := configurator.GetSuitableVhost(vhostItem.serverName, true)
+		sslVhosts, err := configurator.GetSuitableVhosts(vhostItem.serverName, true)
 		assert.Nilf(t, err, "could not get ssl vhost: %v", err)
+		assert.Equal(t, 1, len(sslVhosts))
+		sslVhost := sslVhosts[0]
 		assert.Equal(t, vhostItem.sslConfigFilePath, sslVhost.FilePath)
 		// Check that ssl config file realy exists
 		assert.Equal(t, true, com.IsFile(vhostItem.sslConfigFilePath))
@@ -361,6 +363,51 @@ func TestGetSuitableVhost(t *testing.T) {
 	}
 }
 
+func TestGetSuitableVhostsMultiple(t *testing.T) {
+	configurator := getConfigurator(t)
+	sslVhosts, err := configurator.GetSuitableVhosts("example4.com", true)
+	assert.Nilf(t, err, "could not get ssl vhost: %v", err)
+	assert.Equal(t, 2, len(sslVhosts))
+	addresses := []string{"[2002:5bcc:18fd:c:10:52:43:96]", "10.52.43.96"}
+
+	for _, sslVhost := range sslVhosts {
+		assert.Equal(t, "/etc/apache2/sites-enabled/example4-ssl.com.conf", sslVhost.FilePath)
+		// Check that ssl config file realy exists
+		assert.Equal(t, true, com.IsFile("/etc/apache2/sites-enabled/example4-ssl.com.conf"))
+		assert.Equal(t, "example4.com", sslVhost.ServerName)
+		assert.Equal(t, "/var/www/html", sslVhost.DocRoot)
+		assert.Equal(t, true, sslVhost.Ssl)
+		assert.Equal(t, true, sslVhost.Enabled)
+		assert.Equal(t, false, sslVhost.ModMacro)
+		assert.Equal(t, 1, len(sslVhost.Addresses))
+		assert.Equal(t, true, com.IsSliceContainsStr(addresses, sslVhost.GetAddressesString(true)))
+	}
+}
+
+func TestDeployCertificate(t *testing.T) {
+	configurator := getConfigurator(t)
+	err := configurator.DeployCertificate("example5.com", "/opt/a2conf/test_data/apache/certificate/example.com.crt", "/opt/a2conf/test_data/apache/certificate/example.com.key", "", "/opt/a2conf/test_data/apache/certificate/example.com.crt")
+	assert.Nilf(t, err, "could not deploy certificate to vhost: %v", err)
+	err = configurator.Save()
+	assert.Nilf(t, err, "could not save changes after certificate deploy: %v", err)
+	assert.Equal(t, true, configurator.CheckConfiguration())
+	err = configurator.Commit()
+	assert.Nilf(t, err, "could not commit changes after certificate deploy: %v", err)
+	err = configurator.RestartWebServer()
+	assert.Nilf(t, err, "could not restart webserver after certificate deploy: %v", err)
+	// Check that ssl config file realy exists
+	sslConfigFilePath := "/etc/apache2/sites-enabled/example5.com-ssl.conf"
+	assert.Equal(t, true, com.IsFile(sslConfigFilePath))
+
+	sslConfigContent, err := ioutil.ReadFile(sslConfigFilePath)
+	assert.Nilf(t, err, "could not read apache vhost ssl config file '%s' content: %v", sslConfigFilePath, err)
+	directives := []string{"SSLCertificateKeyFile /opt/a2conf/test_data/apache/certificate/example.com.key", "SSLEngine on", "SSLCertificateFile /opt/a2conf/test_data/apache/certificate/example.com.crt"}
+
+	for _, directive := range directives {
+		assert.Containsf(t, string(sslConfigContent), directive, "ssl config does not contain directive '%s'", directive)
+	}
+}
+
 func getVhostsJSON(t *testing.T) string {
 	vhostsPath := apacheDir + "/vhosts.json"
 	assert.FileExists(t, vhostsPath, "could not open vhosts file")
@@ -377,12 +424,12 @@ func getConfigurator(t *testing.T) *apacheConfigurator {
 	return configurator.(*apacheConfigurator)
 }
 
-func getVhost(t *testing.T, configurator ApacheConfigurator, serverName string) *entity.VirtualHost {
-	vhost, err := configurator.FindSuitableVhost(serverName)
+func getVhosts(t *testing.T, configurator ApacheConfigurator, serverName string) []*entity.VirtualHost {
+	vhosts, err := configurator.FindSuitableVhosts(serverName)
 	assert.Nilf(t, err, "could not find suitable vhost: %v", err)
-	assert.NotNilf(t, vhost, "could not find suitable vhost for '%s' servername", serverName)
+	assert.NotEmptyf(t, vhosts, "could not find suitable vhost for '%s' servername", serverName)
 
-	return vhost
+	return vhosts
 }
 
 func getVhostConfigContent(t *testing.T, name string) string {

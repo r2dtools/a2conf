@@ -1,5 +1,23 @@
 [
     {
+        "FilePath":"/etc/apache2/sites-enabled/example5.com.conf",
+        "ServerName":"example5.com",
+        "DocRoot":"/var/www/html",
+        "AugPath":"/files/etc/apache2/sites-enabled/example5.com.conf/VirtualHost",
+        "Addresses":{
+            "Kjo4MA==":{
+                "IsIpv6":false,
+                "Host":"*",
+                "Port": "80"
+            }
+        },
+        "Aliases":["www.example5.com"],
+        "Ssl":false,
+        "Enabled":true,
+        "ModMacro":false,
+        "Ancestor":null
+    },
+    {
         "FilePath":"/etc/apache2/sites-enabled/example3.com.conf",
         "ServerName":"example3.com",
         "DocRoot":"/var/www/html",
@@ -13,6 +31,78 @@
         },
         "Aliases":["www.example3.com"],
         "Ssl":false,
+        "Enabled":true,
+        "ModMacro":false,
+        "Ancestor":null
+    },
+    {
+        "FilePath":"/etc/apache2/sites-enabled/example4-ssl.com.conf",
+        "ServerName":"example4.com",
+        "DocRoot":"/var/www/html",
+        "AugPath":"/files/etc/apache2/sites-enabled/example4-ssl.com.conf/VirtualHost[1]",
+        "Addresses":{
+            "MTAuNTIuNDMuOTY6ODA=":{
+                "IsIpv6":false,
+                "Host":"10.52.43.96",
+                "Port": "80"
+            }
+        },
+        "Aliases":["www.example4.com"],
+        "Ssl":false,
+        "Enabled":true,
+        "ModMacro":false,
+        "Ancestor":null
+    },
+    {
+        "FilePath":"/etc/apache2/sites-enabled/example4-ssl.com.conf",
+        "ServerName":"example4.com",
+        "DocRoot":"/var/www/html",
+        "AugPath":"/files/etc/apache2/sites-enabled/example4-ssl.com.conf/VirtualHost[2]",
+        "Addresses":{
+            "WzIwMDI6NWJjYzoxOGZkOmM6MTA6NTI6NDM6OTZdOjgw":{
+                "IsIpv6":true,
+                "Host":"[2002:5bcc:18fd:c:10:52:43:96]",
+                "Port": "80"
+            }
+        },
+        "Aliases":["www.example4.com"],
+        "Ssl":false,
+        "Enabled":true,
+        "ModMacro":false,
+        "Ancestor":null
+    },
+    {
+        "FilePath":"/etc/apache2/sites-enabled/example4-ssl.com.conf",
+        "ServerName":"example4.com",
+        "DocRoot":"/var/www/html",
+        "AugPath":"/files/etc/apache2/sites-enabled/example4-ssl.com.conf/VirtualHost[3]",
+        "Addresses":{
+            "MTAuNTIuNDMuOTY6NDQz":{
+                "IsIpv6":false,
+                "Host":"10.52.43.96",
+                "Port": "443"
+            }
+        },
+        "Aliases":["www.example4.com"],
+        "Ssl":true,
+        "Enabled":true,
+        "ModMacro":false,
+        "Ancestor":null
+    },
+    {
+        "FilePath":"/etc/apache2/sites-enabled/example4-ssl.com.conf",
+        "ServerName":"example4.com",
+        "DocRoot":"/var/www/html",
+        "AugPath":"/files/etc/apache2/sites-enabled/example4-ssl.com.conf/VirtualHost[4]",
+        "Addresses":{
+            "WzIwMDI6NWJjYzoxOGZkOmM6MTA6NTI6NDM6OTZdOjQ0Mw==":{
+                "IsIpv6":true,
+                "Host":"[2002:5bcc:18fd:c:10:52:43:96]",
+                "Port": "443"
+            }
+        },
+        "Aliases":["www.example4.com"],
+        "Ssl":true,
         "Enabled":true,
         "ModMacro":false,
         "Ancestor":null

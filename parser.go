@@ -78,13 +78,11 @@ func GetParser(apachectl *apache.Ctl, version, serverRoot, vhostRoot string) (*P
 
 	if err = parser.setLocations(); err != nil {
 		parser.Close()
-
 		return nil, err
 	}
 
 	if err = parser.ParseFile(parser.ConfigRoot); err != nil {
 		parser.Close()
-
 		return nil, fmt.Errorf("could not parse apache config: %v", err)
 	}
 
