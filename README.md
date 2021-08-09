@@ -79,7 +79,7 @@ func main() {
 
 func rollback(configurator a2conf.ApacheConfigurator) {
 	if err := configurator.Rollback(); err != nil {
-		logger.Error(fmt.Sprintf("could not rollback apache configuration: %v", err))
+		// do something, logging
 	}
 }
 ```
