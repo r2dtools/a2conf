@@ -1,5 +1,5 @@
 # a2conf
-With the help of the library, you can manage the configs of the virtual hosts of the apache web server. For example, you can get a list of virtual hosts, or install a certificate on a virtual host. Under the hood, a2conf works with configs using the [augeas](https://augeas.net/) library.
+With the help of the library, you can manage the configs of the virtual hosts of the apache web server. For example, you can get a list of virtual hosts, or install a certificate on a virtual host. Under the hood, a2conf works with configs using the [Augeas](https://augeas.net/) library.
 
 ## Installation
 ```bash
