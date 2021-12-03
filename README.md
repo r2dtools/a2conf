@@ -46,7 +46,7 @@ func main() {
 	configurator, err := a2conf.GetApacheConfigurator(nil)
 
 	if err != nil {
-		panic(fmt.Sprintf("could not create apache configurator: %v", err))
+		return fmt.Errorf(fmt.Sprintf("could not create apache configurator: %v", err))
 	}
 	
 	if err := configurator.DeployCertificate("example.com", "certPath", "certKeyPath", "chainPath", "fullChainPath"); err != nil {
@@ -57,14 +57,12 @@ func main() {
 	if err := configurator.Save(); err != nil {
 		message := fmt.Sprintf("could not deploy certificate for virtual host '%s': could not save changes for apache configuration: %v", vhost.ServerName, err)
 		rollback(configurator)
-
 		return fmt.Errorf(message)
 	}
 
 	if !configurator.CheckConfiguration() {
 		message := fmt.Sprintf("could not deploy certificate for virtual host '%s': apache configuration is invalid.", vhost.ServerName)
 		rollback(configurator)
-
 		return fmt.Errorf(message)
 	}
 
